@@ -113,3 +113,76 @@ import json
 with open('avg-block-size.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 print(data)
+
+with open('avg-block-size-year.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
+    data = json.load(file)
+    block_df = pd.DataFrame(data['avg-block-size'])
+#print(data)
+print(data.keys())
+print(block_df.columns)
+block_df['x'].head()
+block_df['y'].tail()
+
+block_df['x'] = pd.to_datetime(block_df['x'], unit='ms')
+
+block_df = block_df.rename(columns={'x': 'date'})
+block_df = block_df.rename(columns={'y': 'avg-block-size'})
+
+block_df= block_df.reset_index(drop=True)
+
+print(block_df.tail())
+print(df_no_time.columns)
+print(df_no_time['date'].tail())
+
+print(df_no_time.info())
+print(block_df.info())
+
+df_no_time['date'] = pd.to_datetime(df_no_time['date'], format='%Y-%m-%d')
+
+with open('hash-rate-year.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
+    data = json.load(file)
+    hash_df = pd.DataFrame(data['hash-rate'])
+#print(data)
+print(data.keys())
+print(block_df.columns)
+hash_df['x'].head()
+hash_df['y'].tail()
+
+hash_df['x'] = pd.to_datetime(hash_df['x'], unit='ms')
+
+hash_df = hash_df.rename(columns={'x': 'date'})
+hash_df = hash_df.rename(columns={'y': 'hash-rate'})
+
+hash_df= hash_df.reset_index(drop=True)
+
+hash_df.tail()
+
+df1 = df_no_time.merge(block_df, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
+df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date') #то есть у нас есть только за ПОСЛЕДНИЙ ГОД
+
+df.info()
+print(df['date'].tail())
+
+metrics.append('avg-block-size')
+metrics.append('hash-rate')
+
+metrics = [
+    'close',
+    'volume',
+    'marketCap',
+    'rsi',
+    'EMA_12',
+    'EMA_26',
+    'MACD',
+    'Signal_Line',
+    'MACD_Cross_Power_Normalized',
+    'hash-rate',
+    'avg-block-size'
+]
+
+plt.figure(figsize=(18, 16))
+sns.heatmap( df[metrics].corr(),
+             annot=True,
+             cmap='coolwarm')
+plt.savefig('correlation_heatmap_new.png')
+plt.close()
