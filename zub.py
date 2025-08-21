@@ -108,3 +108,8 @@ plt.close()
 #print(df_no_time[metrics].tail(10))
 
 print(df_no_time.info())
+
+import json
+with open('avg-block-size.json', 'r', encoding='utf-8') as file:
+    data = json.load(file)
+print(data)
