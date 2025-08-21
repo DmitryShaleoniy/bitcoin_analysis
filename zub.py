@@ -1,5 +1,4 @@
 from datetime import date
-
 import pandas as pd
 import numpy as np
 
@@ -11,21 +10,22 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Загрузка данных
-df = pd.read_csv('BTC_merged_2010_to_2025.csv')a
+df = pd.read_csv('df_analyss.csv')
 metrics= ['close', 'volume', 'marketCap']
 
 
-print(df.info())
-print(df.columns)
-df_no_time = df.drop(columns=['timeOpen', 'timeClose', 'timeHigh', 'timeLow', 'name'])
-#преобразование даты
-df_no_time['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-df_no_time['date'] = pd.to_datetime(df['timestamp']).dt.date
-df_no_time = df_no_time.drop(columns=['timestamp'])
+# print(df.info())
+# print(df.columns)
+# df_no_time = df.drop(columns=['timeOpen', 'timeClose', 'timeHigh', 'timeLow', 'name'])
+# #преобразование даты
+# df_no_time['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+# df_no_time['date'] = pd.to_datetime(df['timestamp']).dt.date
+# df_no_time = df_no_time.drop(columns=['timestamp'])
+#
+# df_no_time = df_no_time[df_no_time['date'] >= date(2025, 1, 1)]
+# df_no_time = df_no_time.reset_index(drop=True)
 
-df_no_time = df_no_time[df_no_time['date'] >= date(2025, 1, 1)]
-df_no_time = df_no_time.reset_index(drop=True)
-
+df_no_time = df
 #рассчет среднего, прибыли и убытка
 df_no_time['change'] = df_no_time['close'] - df_no_time['open']
 df_no_time['gain']=df_no_time['change'].apply(lambda x: x  if x > 0 else 0)
@@ -42,6 +42,12 @@ metrics.append('loss_avg_14')
 df_no_time['rs'] = (df_no_time['gain_avg_14'] / df_no_time['loss_avg_14']).apply(lambda x: round(x, 2))
 df_no_time['rsi'] = (100 - (100 / (1 + df_no_time['rs']))).apply(lambda x: round(x, 2))
 metrics.append('rsi')
+#rsi - это своеобразный спижометр для цены - rs считаем как отношение суммы ПРИРОСТОВ за 14 дней к сумме ПАДЕНИЙ за 14 дней
+#--можно не за 14 дней--
+#rsi - это приведение rs к процентному виду
+#если rsi > 70 - актив перекуплен - это сигнал к падению
+#если rsi < 30 - актив перепродан - это сигнал к росту
+
 #метрики по rsi
 df_no_time['is_overbought'] = (df_no_time['rsi'] > 70) * 1
 df_no_time['is_oversold'] = (df_no_time['rsi'] < 30) * 1
@@ -51,6 +57,25 @@ metrics.append('is_oversold')
 
 df_no_time['EMA_12'] = df_no_time['close'].ewm(span=12, adjust=False).mean()
 df_no_time['EMA_26'] = df_no_time['close'].ewm(span=26, adjust=False).mean()
+
+metrics.append('EMA_12')
+metrics.append('EMA_26')
+
+##про EMA - это средняя цена за промежуток, но с акцентом на последние данные -
+#последние данные влияют на результат больше, чем те, что в начале промежутка
+
+#про MACD - это метрика, которая показиывает разницу (буквально разность) между двумя трендами -
+#долгосрчный и короткосрочный - эти тренды представлеют собой EMA за 21 и 12 дней соответственно
+#также существует такое понятие, как сигрнальная линия - это среднее значение MACD за последнее время(в нашем случае - за 9 дней)
+
+#MACD исследуют на дистанции - смотрят на то, как он изменяется
+#если он растет - разность между кратком и долгосрочным трендом растет - это означает бычий рост
+#наоборот - это означает медвежий рост
+#далее - про взаимосвязь с сигнальной линией MACD пересекает сигнальную снизу вверх — сигнал к покупке - у Макара тут это
+# называется золотой крест (бычье пересечение)
+#MACD пересекает сигнальную сверху вниз — сигнал к продажеMACD пересекает сигнальную снизу вверх) — сигнал к покупке
+# - мертвый крест (медвежье пересечение).
+
 df_no_time['MACD'] = df_no_time['EMA_12'] - df_no_time['EMA_26']
 df_no_time['Signal_Line'] = df_no_time['MACD'].ewm(span=9, adjust=False).mean()
 df_no_time['MACD_Histogram'] = df_no_time['MACD'] - df_no_time['Signal_Line']
