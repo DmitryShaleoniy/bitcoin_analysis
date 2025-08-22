@@ -1,4 +1,6 @@
 from datetime import date
+from threading import activeCount
+
 import pandas as pd
 import numpy as np
 
@@ -11,8 +13,6 @@ import matplotlib.pyplot as plt
 
 # Загрузка данных
 df = pd.read_csv('df_analyss.csv')
-metrics= ['close', 'volume', 'marketCap']
-
 
 # print(df.info())
 # print(df.columns)
@@ -30,18 +30,16 @@ df_no_time = df
 df_no_time['change'] = df_no_time['close'] - df_no_time['open']
 df_no_time['gain']=df_no_time['change'].apply(lambda x: x  if x > 0 else 0)
 df_no_time['loss']=df_no_time['change'].apply(lambda x: -x if x < 0 else 0)
-#metrics.append('gain')
-#metrics.append('loss')
+
 
 df_no_time['gain_avg_14'] = df_no_time['gain'].rolling(14).mean()
 df_no_time['loss_avg_14'] = df_no_time['loss'].rolling(14).mean()
-metrics.append('gain_avg_14')
-metrics.append('loss_avg_14')
+
 
 #вводим rsi
 df_no_time['rs'] = (df_no_time['gain_avg_14'] / df_no_time['loss_avg_14']).apply(lambda x: round(x, 2))
 df_no_time['rsi'] = (100 - (100 / (1 + df_no_time['rs']))).apply(lambda x: round(x, 2))
-metrics.append('rsi')
+
 #rsi - это своеобразный спижометр для цены - rs считаем как отношение суммы ПРИРОСТОВ за 14 дней к сумме ПАДЕНИЙ за 14 дней
 #--можно не за 14 дней--
 #rsi - это приведение rs к процентному виду
@@ -51,15 +49,10 @@ metrics.append('rsi')
 #метрики по rsi
 df_no_time['is_overbought'] = (df_no_time['rsi'] > 70) * 1
 df_no_time['is_oversold'] = (df_no_time['rsi'] < 30) * 1
-metrics.append('is_overbought')
-metrics.append('is_oversold')
 #distance_from_70 = df['rsi_14'] - 70
 
 df_no_time['EMA_12'] = df_no_time['close'].ewm(span=12, adjust=False).mean()
 df_no_time['EMA_26'] = df_no_time['close'].ewm(span=26, adjust=False).mean()
-
-metrics.append('EMA_12')
-metrics.append('EMA_26')
 
 ##про EMA - это средняя цена за промежуток, но с акцентом на последние данные -
 #последние данные влияют на результат больше, чем те, что в начале промежутка
@@ -79,9 +72,6 @@ metrics.append('EMA_26')
 df_no_time['MACD'] = df_no_time['EMA_12'] - df_no_time['EMA_26']
 df_no_time['Signal_Line'] = df_no_time['MACD'].ewm(span=9, adjust=False).mean()
 df_no_time['MACD_Histogram'] = df_no_time['MACD'] - df_no_time['Signal_Line']
-metrics.append('MACD')
-metrics.append('MACD_Histogram')
-metrics.append( 'Signal_Line')
 
 # Бычье пересечение (золотой крест MACD) в момент i
 df_no_time['MACD_Bullish_Cross'] = ((df_no_time['MACD'] > df_no_time['Signal_Line']) &
@@ -94,73 +84,78 @@ df_no_time['MACD_Bearish_Cross'] = ((df_no_time['MACD'] < df_no_time['Signal_Lin
 df_no_time['MACD_Cross_Power'] = df_no_time['MACD_Histogram']
 #нормализовано относительно цены:
 df_no_time['MACD_Cross_Power_Normalized'] = df_no_time['MACD_Histogram'] / df_no_time['close']
-metrics.append('MACD_Cross_Power_Normalized')
-metrics.append('MACD_Bullish_Cross')
-metrics.append('MACD_Bearish_Cross')
 
-sns.heatmap( df_no_time[metrics].corr(),
-             annot=True,
-             cmap='coolwarm')
-plt.savefig('correlation_heatmap.png')
-plt.close()
-
-#print(df_no_time[metrics].head(15))
-#print(df_no_time[metrics].tail(10))
-
-print(df_no_time.info())
 
 import json
 
 with open('spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
     data = json.load(file)
     block_df_temp = pd.DataFrame(data)
-#print(data)
-print('HERE')
+
 block = block_df_temp['data']
-print(block[0][0][0])
 block_df_temp = pd.DataFrame()
+
 block_df_temp['date'] = [i[0] for i in block[0]]
 block_df_temp['bsize'] = [i[1] for i in block[0]]
-
 block_df_temp['date'] = pd.to_datetime(block_df_temp['date'], unit='s')
-print(block_df_temp.head())
-print(block_df_temp.tail())
-
-#block_df['data'] = pd.to_datetime(block_df['data'], unit='ms')
-
 block_df_temp= block_df_temp.reset_index(drop=True)
+
 
 with open('hash_rate_mean_stolen.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
     hash_df = pd.DataFrame(data)
-#print(data)
-print(hash_df['v'].tail())
 
 hash_df['t'] = pd.to_datetime(hash_df['t'], unit='s')
 
-print(hash_df['t'].head())
-
-
 hash_df = hash_df.rename(columns={'t': 'date'})
 hash_df = hash_df.rename(columns={'v': 'hash-rate'})
-
 hash_df= hash_df.reset_index(drop=True)
 
-print('dfrsgrtherht')
-print(df_no_time['date'].tail())
+
+#активные адреса
+#https://studio.glassnode.com/charts/addresses.ActiveCount?a=BTC&chartStyle=column&pScl=lin&zoom=all
+with open('active_count.json', 'r', encoding='utf-8') as file:
+    data = json.load(file)
+    active_count_df = pd.DataFrame(data)
+
+active_count_df['t'] = pd.to_datetime(active_count_df['t'], unit='s')
+active_count_df = active_count_df.rename(columns={'t': 'date'})
+active_count_df = active_count_df.rename(columns={'v': 'active-count'})
+active_count_df= active_count_df.reset_index(drop=True)
+
+
+#датасет с суммой всех fees за день (крутой, мало коррелирует)
+#https://studio.glassnode.com/charts/fees.VolumeSum?a=BTC&chartStyle=column&pScl=lin&zoom=all
+with open('volume_sum.json', 'r', encoding='utf-8') as file:
+    data = json.load(file)
+    total_fee_df = pd.DataFrame(data)
+
+total_fee_df['t'] = pd.to_datetime(total_fee_df['t'], unit='s')
+
+total_fee_df = total_fee_df.rename(columns={'t': 'date'})
+total_fee_df = total_fee_df.rename(columns={'v': 'total_fee'})
+total_fee_df= total_fee_df.reset_index(drop=True)
+
+
+#монет через транзакции (мб иожно улучщить за счет сравнения с ценой монеты???)
+#https://api.glassnode.com/v1/metrics/transactions/transfers_volume_sum?a=BTC&i=24h
+with open('transfers_volume_sum.json', 'r', encoding='utf-8') as file:
+    data = json.load(file)
+    transfer_count_df = pd.DataFrame(data)
+
+transfer_count_df['t'] = pd.to_datetime(transfer_count_df['t'], unit='s')
+
+transfer_count_df = transfer_count_df.rename(columns={'t': 'date'})
+transfer_count_df = transfer_count_df.rename(columns={'v': 'transfer_count'})
+transfer_count_df= transfer_count_df.reset_index(drop=True)
+
+
 df_no_time['date'] = pd.to_datetime(df_no_time['date'])
-print(df_no_time['date'].tail())
-
-
 df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
 df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date') #то есть у нас есть только за ПОСЛЕДНИЙ ГОД
-
-print(df.info())
-print('HERE')
-print(df['date'].tail())
-
-metrics.append('bsize')
-metrics.append('hash-rate')
+df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
+df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
+df = df.merge(transfer_count_df, on='date', how='inner').sort_values(by='date')
 
 metrics = [
     'close',
@@ -172,7 +167,10 @@ metrics = [
     'Signal_Line',
     'MACD_Cross_Power_Normalized',
     'hash-rate',
-    'bsize'
+    'bsize',
+    'active-count',
+    'total_fee',
+    'transfer_count'
 ]
 
 plt.figure(figsize=(18, 16))
@@ -185,5 +183,17 @@ plt.close()
 
 
 # print('adefe')
-#
-print(df['date'].tail())
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', 1000)
+print(df.info())
+print(df.head())
+print(df.tail())
+
+
+data = df[[ 'date','close', 'volume', 'rsi', 'MACD', 'hash-rate', 'bsize', 'active-count', 'total_fee', 'transfer_count']]
+plt.figure(figsize=(18, 16))
+sns.heatmap( data.drop(columns=['date']).corr(),
+             annot=True,
+             cmap='Greens')
+plt.savefig('no_corr_try.png')
+plt.close()
