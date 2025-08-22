@@ -110,66 +110,61 @@ plt.close()
 print(df_no_time.info())
 
 import json
-with open('avg-block-size.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
-print(data)
 
-with open('avg-block-size-year.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
+with open('spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
     data = json.load(file)
-    block_df = pd.DataFrame(data['avg-block-size'])
+    block_df_temp = pd.DataFrame(data)
 #print(data)
-print(data.keys())
-print(block_df.columns)
-block_df['x'].head()
-block_df['y'].tail()
+print('HERE')
+block = block_df_temp['data']
+print(block[0][0][0])
+block_df_temp = pd.DataFrame()
+block_df_temp['date'] = [i[0] for i in block[0]]
+block_df_temp['bsize'] = [i[1] for i in block[0]]
 
-block_df['x'] = pd.to_datetime(block_df['x'], unit='ms')
+block_df_temp['date'] = pd.to_datetime(block_df_temp['date'], unit='s')
+print(block_df_temp.head())
+print(block_df_temp.tail())
 
-block_df = block_df.rename(columns={'x': 'date'})
-block_df = block_df.rename(columns={'y': 'avg-block-size'})
+#block_df['data'] = pd.to_datetime(block_df['data'], unit='ms')
 
-block_df= block_df.reset_index(drop=True)
+block_df_temp= block_df_temp.reset_index(drop=True)
 
-print(block_df.tail())
-print(df_no_time.columns)
-print(df_no_time['date'].tail())
-
-print(df_no_time.info())
-print(block_df.info())
-
-df_no_time['date'] = pd.to_datetime(df_no_time['date'], format='%Y-%m-%d')
-
-with open('hash-rate-year.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
+with open('hash_rate_mean_stolen.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
-    hash_df = pd.DataFrame(data['hash-rate'])
+    hash_df = pd.DataFrame(data)
 #print(data)
-print(data.keys())
-print(block_df.columns)
-hash_df['x'].head()
-hash_df['y'].tail()
+print(hash_df['v'].tail())
 
-hash_df['x'] = pd.to_datetime(hash_df['x'], unit='ms')
+hash_df['t'] = pd.to_datetime(hash_df['t'], unit='s')
 
-hash_df = hash_df.rename(columns={'x': 'date'})
-hash_df = hash_df.rename(columns={'y': 'hash-rate'})
+print(hash_df['t'].head())
+
+
+hash_df = hash_df.rename(columns={'t': 'date'})
+hash_df = hash_df.rename(columns={'v': 'hash-rate'})
 
 hash_df= hash_df.reset_index(drop=True)
 
-hash_df.tail()
+print('dfrsgrtherht')
+print(df_no_time['date'].tail())
+df_no_time['date'] = pd.to_datetime(df_no_time['date'])
+print(df_no_time['date'].tail())
 
-df1 = df_no_time.merge(block_df, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
+
+df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
 df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date') #то есть у нас есть только за ПОСЛЕДНИЙ ГОД
 
-df.info()
+print(df.info())
+print('HERE')
 print(df['date'].tail())
 
-metrics.append('avg-block-size')
+metrics.append('bsize')
 metrics.append('hash-rate')
 
 metrics = [
     'close',
     'volume',
-    'marketCap',
     'rsi',
     'EMA_12',
     'EMA_26',
@@ -177,7 +172,7 @@ metrics = [
     'Signal_Line',
     'MACD_Cross_Power_Normalized',
     'hash-rate',
-    'avg-block-size'
+    'bsize'
 ]
 
 plt.figure(figsize=(18, 16))
@@ -186,3 +181,9 @@ sns.heatmap( df[metrics].corr(),
              cmap='coolwarm')
 plt.savefig('correlation_heatmap_new.png')
 plt.close()
+
+
+
+# print('adefe')
+#
+print(df['date'].tail())
