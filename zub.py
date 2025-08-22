@@ -12,7 +12,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Загрузка данных
-df = pd.read_csv('df_analyss.csv')
+df = pd.read_csv('combined_data.csv')
+
+
 
 # print(df.info())
 # print(df.columns)
@@ -26,6 +28,7 @@ df = pd.read_csv('df_analyss.csv')
 # df_no_time = df_no_time.reset_index(drop=True)
 
 df_no_time = df
+
 #рассчет среднего, прибыли и убытка
 df_no_time['change'] = df_no_time['close'] - df_no_time['open']
 df_no_time['gain']=df_no_time['change'].apply(lambda x: x  if x > 0 else 0)
@@ -53,6 +56,7 @@ df_no_time['is_oversold'] = (df_no_time['rsi'] < 30) * 1
 
 df_no_time['EMA_12'] = df_no_time['close'].ewm(span=12, adjust=False).mean()
 df_no_time['EMA_26'] = df_no_time['close'].ewm(span=26, adjust=False).mean()
+
 
 ##про EMA - это средняя цена за промежуток, но с акцентом на последние данные -
 #последние данные влияют на результат больше, чем те, что в начале промежутка
@@ -86,6 +90,7 @@ df_no_time['MACD_Cross_Power'] = df_no_time['MACD_Histogram']
 df_no_time['MACD_Cross_Power_Normalized'] = df_no_time['MACD_Histogram'] / df_no_time['close']
 
 
+
 import json
 
 with open('spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
@@ -101,16 +106,23 @@ block_df_temp['date'] = pd.to_datetime(block_df_temp['date'], unit='s')
 block_df_temp= block_df_temp.reset_index(drop=True)
 
 
-with open('hash_rate_mean_stolen.json', 'r', encoding='utf-8') as file:
+with open('hash-rate-spizhennoe-v2.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
-    hash_df = pd.DataFrame(data)
+    #hash_df_temp = pd.DataFrame(data['data'])
 
-hash_df['t'] = pd.to_datetime(hash_df['t'], unit='s')
+parsed_data = json.loads(data['data'])
 
-hash_df = hash_df.rename(columns={'t': 'date'})
-hash_df = hash_df.rename(columns={'v': 'hash-rate'})
-hash_df= hash_df.reset_index(drop=True)
+#print(parsed_data)
+hash_df_temp = pd.DataFrame(parsed_data['data'])
 
+hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x'], unit='ms')
+hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x']).dt.strftime('%Y-%m-%d')
+hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x'])
+hash_df_temp['y'] = pd.to_numeric(hash_df_temp['y'])
+hash_df_temp = hash_df_temp.rename(columns={'x': 'date'})
+hash_df_temp = hash_df_temp.rename(columns={'y': 'hash-rate'})
+hash_df= hash_df_temp.reset_index(drop=True)
+print(hash_df.head())
 
 #активные адреса
 #https://studio.glassnode.com/charts/addresses.ActiveCount?a=BTC&chartStyle=column&pScl=lin&zoom=all
@@ -122,6 +134,7 @@ active_count_df['t'] = pd.to_datetime(active_count_df['t'], unit='s')
 active_count_df = active_count_df.rename(columns={'t': 'date'})
 active_count_df = active_count_df.rename(columns={'v': 'active-count'})
 active_count_df= active_count_df.reset_index(drop=True)
+
 
 
 #датасет с суммой всех fees за день (крутой, мало коррелирует)
@@ -152,10 +165,12 @@ transfer_count_df= transfer_count_df.reset_index(drop=True)
 
 df_no_time['date'] = pd.to_datetime(df_no_time['date'])
 df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
-df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date') #то есть у нас есть только за ПОСЛЕДНИЙ ГОД
+df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date')
+#НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
 df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(transfer_count_df, on='date', how='inner').sort_values(by='date')
+
 
 metrics = [
     'close',
@@ -172,6 +187,8 @@ metrics = [
     'total_fee',
     'transfer_count'
 ]
+
+
 
 plt.figure(figsize=(18, 16))
 sns.heatmap( df[metrics].corr(),
