@@ -207,10 +207,13 @@ print(df.head())
 print(df.tail())
 
 
-data = df[[ 'date','close', 'volume', 'rsi', 'MACD', 'hash-rate', 'bsize', 'active-count', 'total_fee', 'transfer_count']]
+data = df[[ 'date','close', 'volume', 'rsi', 'MACD', 'hash-rate', 'active-count', 'total_fee', 'transfer_count']]
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),
              annot=True,
              cmap='Greens')
 plt.savefig('no_corr_try.png')
 plt.close()
+
+
+data.to_csv('main_data.csv', index=False)
