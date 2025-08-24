@@ -39,7 +39,7 @@ df['close_change'] = df['close'].pct_change(2)  # Изменение за 2 дн
 df['close_change'] = df['close'].pct_change(3)  # Изменение за 3 дня
 
 # Создание лаговых features (ТОЛЬКО на исторических данных)
-features_to_lag = ['close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate',
+features_to_lag = ['close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate', 'close',
                    'active-count', 'total_fee', 'transfer_count', 'yuan', 'zew_state', 'zew_mood_index']
 df = create_lag_features(df, features_to_lag, n_lags=7)
 
@@ -69,10 +69,11 @@ print(f"Пример: date={df.iloc[0]['date']}, close={df.iloc[0]['close']}, ta
 selected_features = [
     # Только лаговые features и исторические данные!
     'zew_mood_index_lag_1', 'zew_mood_index_lag_2', 'zew_mood_index_lag_3',
-    'active-count_lag_1', 'active-count_lag_2',
-        'active-count_lag_3', 'active-count_lag_4', 'active-count_lag_5',
+    'active-count_lag_2',
+        'active-count_lag_4', 'active-count_lag_5',
     'total_fee_lag_1', 'total_fee_lag_2', #'total_fee_lag_3',
     'transfer_count_lag_1', 'transfer_count_lag_3',  'transfer_count_lag_5',
+    'close_lag_1', 'close_lag_3', #'close_lag_4', 'close_lag_5',
     'close_change_lag_1', 'close_change_lag_2',
     'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
     'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
