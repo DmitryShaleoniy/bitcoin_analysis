@@ -302,5 +302,3 @@ plt.legend()
 plt.title('Предсказания vs Реальная цена')
 
 plt.show()
-
-
