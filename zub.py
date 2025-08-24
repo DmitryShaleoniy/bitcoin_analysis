@@ -196,12 +196,16 @@ transfer_count_df= transfer_count_df.reset_index(drop=True)
 zew_df = pd.read_csv('zew.csv')
 zew_df['date'] = pd.to_datetime(zew_df['date'])
 
+gesi_df = pd.read_csv('gesi.csv')
+gesi_df['date'] = pd.to_datetime(gesi_df['date'])
+
 
 df_no_time['date'] = pd.to_datetime(df_no_time['date'])
 df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
 df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(zew_df, on='date', how='inner').sort_values(by='date')
+df = df.merge(gesi_df, on='date', how='inner').sort_values(by='date')
 #НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
 df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
@@ -252,7 +256,7 @@ print(df.tail())
 data = df[['yuan','date','close', 'volume', 'rsi',
            'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
            'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
-           'active-count_smoothed']]
+           'active-count_smoothed', 'gesi_value']]
 
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),
@@ -263,7 +267,3 @@ plt.close()
 
 
 data.to_csv('main_data.csv', index=False)
-
-
-
-
