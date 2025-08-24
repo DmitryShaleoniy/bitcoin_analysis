@@ -208,6 +208,12 @@ df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(transfer_count_df, on='date', how='inner').sort_values(by='date')
 
 
+#усреднение активных адресов за 14 дней
+window_size = 14
+df = df.dropna()
+df['active-count_smoothed'] = df['active-count'].rolling(window=window_size).mean()
+df = df.dropna()
+
 metrics = [
     'close',
     'volume',
@@ -243,7 +249,11 @@ print(df.head())
 print(df.tail())
 
 
-data = df[['yuan','date','close', 'volume', 'rsi', 'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count', 'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state']]
+data = df[['yuan','date','close', 'volume', 'rsi',
+           'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
+           'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
+           'active-count_smoothed']]
+
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),
              annot=True,
@@ -253,3 +263,7 @@ plt.close()
 
 
 data.to_csv('main_data.csv', index=False)
+
+
+
+
