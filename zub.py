@@ -12,14 +12,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Загрузка данных
-df = pd.read_csv('combined_data.csv')
-df_corona = pd.read_csv('btc_corona.csv')
-
+#df = pd.read_csv('combined_data.csv')
+#df_corona = pd.read_csv('btc_corona.csv')
+df = pd.read_csv('btc_no_vibrosi.csv')
 # df = df.merge(df_corona, on='date',  how='outer').sort_values(by='date')
 # print(df.info())
 
 
-df = df.set_index('date').combine_first(df_corona.set_index('date')).reset_index()
+#df = df.set_index('date').combine_first(df_corona.set_index('date')).reset_index()
 
 # Сортируем по дате
 df = df.sort_values(by='date').reset_index(drop=True)
@@ -260,7 +260,7 @@ print(df.tail())
 data = df[['yuan','date','close', 'volume', 'rsi',
            'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
            'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
-           'active-count_smoothed', 'gesi_value', 'rub_usd']]
+           'active-count_smoothed', 'gesi_value', 'rub_usd', 'MACD', 'Signal_Line']]
 
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),
