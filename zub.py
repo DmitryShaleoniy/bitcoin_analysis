@@ -115,10 +115,10 @@ import json
 
 #подключаем юани
 
-china_df = pd.read_csv('china_apply.csv')
-china_df = china_df.rename(columns={'Date': 'date'})
-china_df['date'] = pd.to_datetime(china_df['date'])
-china_df = china_df.rename(columns={'Value': 'yuan'})
+# china_df = pd.read_csv('china_apply.csv')
+# china_df = china_df.rename(columns={'Date': 'date'})
+# china_df['date'] = pd.to_datetime(china_df['date'])
+# china_df = china_df.rename(columns={'Value': 'yuan'})
 
 with open('spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
     data = json.load(file)
@@ -206,10 +206,10 @@ rub_df['date'] = pd.to_datetime(rub_df['date'])
 df_no_time['date'] = pd.to_datetime(df_no_time['date'])
 df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
 df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
+# df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(zew_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(gesi_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(rub_df, on='date', how='inner').sort_values(by='date')
+# df = df.merge(rub_df, on='date', how='inner').sort_values(by='date')
 #НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
 df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
@@ -257,10 +257,15 @@ print(df.head())
 print(df.tail())
 
 
-data = df[['yuan','date','close', 'volume', 'rsi',
+data = df[[''
+           # 'yuan',
+           'date'
+            ,'close', 'volume', 'rsi',
            'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
            'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
-           'active-count_smoothed', 'gesi_value', 'rub_usd']]
+           'active-count_smoothed', 'gesi_value'
+            # , 'rub_usd'
+            , 'MACD', 'Signal_Line']]
 
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),

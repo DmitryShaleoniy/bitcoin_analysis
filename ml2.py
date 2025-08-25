@@ -1,313 +1,242 @@
-import numpy as np
+#df=df[df['date']>='2023-01-01']
+
+
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import RobustScaler
+import numpy as np
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-from sklearn.feature_selection import RFECV
-from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline as ImbPipeline
-import warnings
-warnings.filterwarnings('ignore')
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV
 
-# Улучшенная подготовка данных с акцентом на стационарность
-def prepare_data_advanced_stationary(df):
+# Загрузка данных
+df = pd.read_csv('main_data.csv')
+#df['active-count'] = df['active-count_smoo']
+df=df[df['date']>='2023-06-01']
+#df=df[df['date']<='2022-01-01']
+
+df['date'] = pd.to_datetime(df['date'])
+df = df.sort_values('date').reset_index(drop=True)
+
+# ВАЖНО: Убедитесь что в данных нет будущей информации!
+print("Проверка на утечку данных:")
+print(f"Даты от {df['date'].min()} до {df['date'].max()}")
+
+# Создание лаговых features (ПРАВИЛЬНО - только прошлые данные)
+def create_lag_features(df, columns, n_lags=3):
     df = df.copy()
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.set_index('date').sort_index()
-
-    # Базовые признаки с акцентом на стационарность
-    df['log_close'] = np.log(df['close'])
-    df['log_return'] = df['log_close'].diff()
-
-    # Процентные изменения вместо абсолютных значений
-    for col in ['volume', 'hash-rate', 'active-count', 'total_fee', 'transfer_count']:
-        df[f'{col}_pct_change'] = df[col].pct_change().fillna(0)
-
-    # RSI с различными периодами
-    for rsi_period in [7, 14, 21]:
-        delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.rolling(window=rsi_period).mean()
-        avg_loss = loss.rolling(window=rsi_period).mean()
-        rs = avg_gain / (avg_loss + 1e-8)
-        df[f'RSI_{rsi_period}'] = 100 - (100 / (1 + rs))
-
-    # MACD с различными параметрами
-    for fast, slow in [(12, 26), (8, 17), (5, 35)]:
-        exp1 = df['close'].ewm(span=fast).mean()
-        exp2 = df['close'].ewm(span=slow).mean()
-        df[f'MACD_{fast}_{slow}'] = exp1 - exp2
-        df[f'MACD_signal_{fast}_{slow}'] = df[f'MACD_{fast}_{slow}'].ewm(span=9).mean()
-        df[f'MACD_hist_{fast}_{slow}'] = df[f'MACD_{fast}_{slow}'] - df[f'MACD_signal_{fast}_{slow}']
-
-    # Волатильность различных периодов
-    for window in [7, 14, 21, 30]:
-        df[f'volatility_{window}'] = df['log_return'].rolling(window=window).std().fillna(0)
-
-    # Объемные индикаторы
-    df['volume_ma_ratio_7_21'] = df['volume'].rolling(7).mean() / df['volume'].rolling(21).mean()
-    df['volume_ma_ratio_14_50'] = df['volume'].rolling(14).mean() / df['volume'].rolling(50).mean()
-
-    # Целевая переменная - направление через 3 дня (среднесрочный тренд)
-    df['future_log_return_3'] = df['log_return'].shift(-3)
-    df['target'] = (df['future_log_return_3'] > 0).astype(int)
-
-    # Удаляем строки с NaN
-    df = df.dropna()
-
+    for col in columns:
+        for lag in range(1, n_lags+1):
+            df[f'{col}_lag_{lag}'] = df[col].shift(lag)  # shift(lag) - ПРОШЛЫЕ данные
     return df
 
-# Создание лаговых признаков с отбором
-def create_selected_lags(df, selected_features, n_lags=5):
-    for feature in selected_features:
-        for lag in range(1, n_lags+1):
-            df[f'{feature}_lag_{lag}'] = df[feature].shift(lag)
+# Целевая переменная - будущая цена (цена ЗАВТРА)
+df['target_close'] = df['close'].shift(-1)
 
-    return df.dropna()
+df['close_change'] = df['close'].pct_change(2)  # Изменение за 2 дня
+df['close_change'] = df['close'].pct_change(3)  # Изменение за 3 дня
 
-# Отбор наиболее важных признаков
-def select_features(X, y, n_features=30):
-    from sklearn.ensemble import RandomForestClassifier
+# Создание новых признаков
+df['price_momentum_7d'] = df['close'].pct_change(periods=7)
+df['volume_ma_7'] = df['volume'].rolling(window=7).mean()
+df['volume_ratio_7d'] = df['volume'] / df['volume_ma_7']
 
-    # Быстрый отбор признаков с помощью RandomForest
-    model = RandomForestClassifier(n_estimators=50, random_state=42)
-    model.fit(X, y)
+df['active_count_ma_7'] = df['active-count'].rolling(window=7).mean()
 
-    # Получаем важность признаков
-    importance = pd.DataFrame({
-        'feature': X.columns,
-        'importance': model.feature_importances_
-    }).sort_values('importance', ascending=False)
+df['hash_active_count_7dirived'] = df['hash-rate']/df['active_count_ma_7']
 
-    # Выбираем топ-N признаков
-    selected_features = importance.head(n_features)['feature'].values
+df['returns'] = df['close'].pct_change()
+df['volatility_14d'] = df['returns'].rolling(window=14).std()
 
-    return selected_features
+df['rsi_divergence'] = df['rsi'] - df['close']
 
-# Построение улучшенных моделей с балансировкой классов
-def build_improved_models():
-    # Базовые модели
-    models = {
-        'gbc': GradientBoostingClassifier(
-            learning_rate=0.05,
-            max_depth=4,
-            n_estimators=150,
-            subsample=0.8,
-            random_state=42
-        ),
-        'rfc': RandomForestClassifier(
-            n_estimators=150,
-            max_depth=10,
-            min_samples_split=5,
-            class_weight='balanced',
-            random_state=42
-        )
-    }
+#df['market_cap_trend'] = df['marketCap'].pct_change(periods=7)
 
-    # Создаем пайплайны с балансировкой классов
-    pipelines = {}
-    for name, model in models.items():
-        pipelines[name] = ImbPipeline([
-            ('smote', SMOTE(random_state=42, sampling_strategy='auto')),
-            ('model', model)
-        ])
+df['fee_to_volume_ratio'] = df['total_fee'] / df['volume']
 
-    return pipelines
+df['macd_signal_diff'] = df['MACD'] - df['Signal_Line']
 
-# Улучшенная оценка моделей
-def evaluate_improved_models(X, y):
-    tscv = TimeSeriesSplit(n_splits=5)
-    results = {}
-    all_predictions = {}
 
-    models = build_improved_models()
+# Создание лаговых features (ТОЛЬКО на исторических данных)
+features_to_lag = ['close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate',
+                   'active-count', 'total_fee', 'transfer_count', 'yuan', 'zew_state', 'zew_mood_index', 'rub_usd', 'gesi_value',
+                   'price_momentum_7d', 'volume_ratio_7d', 'volatility_14d', 'rsi_divergence', 'fee_to_volume_ratio', 'macd_signal_diff'
+    , 'hash_active_count_7dirived']
+df = create_lag_features(df, features_to_lag, n_lags=7)
 
-    for name, pipeline in models.items():
-        metrics = {
-            'accuracy': [], 'precision': [], 'recall': [],
-            'f1': [], 'roc_auc': [], 'profit_potential': []
-        }
-        predictions = []
-        probabilities = []
-        actuals = []
+# Добавление скользящих средних (на исторических данных)
+df['close_ma_7'] = df['close'].shift(1).rolling(7).mean()
+df['volume_ma_7'] = df['volume'].rolling(window=7).mean()
 
-        for train_idx, test_idx in tscv.split(X):
-            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+# Добавьте больше лагов для mood index
+df['zew_mood_ma_3'] = df['zew_mood_index'].shift(1).rolling(3).mean()
+df['zew_mood_ma_7'] = df['zew_mood_index'].shift(1).rolling(7).mean()
 
-            scaler = RobustScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
 
-            try:
-                # Обучение пайплайна с SMOTE
-                pipeline.fit(X_train_scaled, y_train)
+# Скользящие средние для total_fee с правильным shift
+df['total_fee_ma_3'] = df['total_fee'].shift(1).rolling(3).mean()
+df['total_fee_ma_7'] = df['total_fee'].shift(1).rolling(7).mean()
+df['total_fee_ma_14'] = df['total_fee'].shift(1).rolling(14).mean()
 
-                # Предсказания
-                preds = pipeline.predict(X_test_scaled)
-                probas = pipeline.predict_proba(X_test_scaled)[:, 1]
 
-                # Сохраняем для анализа
-                predictions.extend(preds)
-                probabilities.extend(probas)
-                actuals.extend(y_test.values)
 
-                # Метрики
-                metrics['accuracy'].append(accuracy_score(y_test, preds))
-                metrics['precision'].append(precision_score(y_test, preds, zero_division=0))
-                metrics['recall'].append(recall_score(y_test, preds, zero_division=0))
-                metrics['f1'].append(f1_score(y_test, preds, zero_division=0))
-                metrics['roc_auc'].append(roc_auc_score(y_test, probas))
+# Удаляем строки с NaN (первые строки после создания лагов и скользящих средних)
+df = df.dropna()
 
-                # Потенциальная прибыльность
-                price_changes = np.abs(X_test['log_return'].values)
-                profit = np.where(preds == y_test, price_changes, -price_changes)
-                metrics['profit_potential'].append(np.mean(profit))
+# ВАЖНО: Убедимся что целевая переменная - это БУДУЩАЯ цена
+print(f"Пример: date={df.iloc[0]['date']}, close={df.iloc[0]['close']}, target={df.iloc[0]['target_close']}")
+# Список новых признаков
+# new_powerful_features = [
+#     'price_momentum_7d',
+#     'volume_ratio_7d',
+#     'volatility_14d',
+#     'rsi_divergence',
+#     'market_cap_trend',
+#     'fee_to_volume_ratio'
+# ]
+selected_features = [
+    # Только лаговые features и исторические данные!
+    #'zew_mood_index_lag_1', 'zew_mood_index_lag_2', 'zew_mood_index_lag_3',
+    #'active-count_lag_1', 'active-count_lag_2',
+    #'active-count_lag_3', 'active-count_lag_4', 'active-count_lag_5',
+    #'total_fee_lag_1', 'total_fee_lag_2', 'total_fee_lag_3',
+    #'transfer_count_lag_1', 'transfer_count_lag_3',  'transfer_count_lag_5',
+    #'close_change_lag_2', 'close_change_lag_3',
+    'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
+    'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
+    #'rsi_lag_1', 'rsi_lag_2',
+    'MACD_Cross_Power_Normalized_lag_1', 'MACD_Cross_Power_Normalized_lag_2',
+    #'rub_usd_lag_1', 'rub_usd_lag_2' , 'rub_usd_lag_3',
+    #'gesi_value_lag_1', 'gesi_value_lag_2', 'gesi_value_lag_3',
+    #'close_ma_7',
+    #'volume_ma_7',
+    #'yuan_lag_1', 'yuan_lag_2', 'yuan_lag_3',
+    #'zew_state_lag_1',
+    #'zew_mood_ma_3',
+    #'zew_mood_ma_7',
+    #'total_fee_ma_3', 'total_fee_ma_7', 'total_fee_ma_14',
+    'hash_active_count_7dirived',
+    'price_momentum_7d',
+    'volume_ratio_7d',
+    'volatility_14d',
+    'rsi_divergence',
+    #'fee_to_volume_ratio',
+    'macd_signal_diff'
+]
 
-            except Exception as e:
-                print(f"Ошибка в {name}: {e}")
-                continue
+df = df.dropna()
 
-        if metrics['accuracy']:
-            results[name] = {key: np.mean(values) for key, values in metrics.items()}
-            all_predictions[name] = {
-                'predictions': np.array(predictions),
-                'probabilities': np.array(probabilities),
-                'actuals': np.array(actuals)
-            }
+X = df[selected_features]
+y = df['target_close']
 
-    return results, all_predictions
+# ХРОНОЛОГИЧЕСКОЕ разделение (без shuffle!)
+train_size = int(len(df) * 0.8)
+X_train = X.iloc[:train_size]
+X_test = X.iloc[train_size:]
+y_train = y.iloc[:train_size]
+y_test = y.iloc[train_size:]
 
-# Визуализация результатов с акцентом на торговую стратегию
-def plot_trading_strategy_results(results, predictions_dict):
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+print(f"Train dates: {df.iloc[0]['date']} to {df.iloc[train_size-1]['date']}")
+print(f"Test dates: {df.iloc[train_size]['date']} to {df.iloc[-1]['date']}")
 
-    # График 1: Сравнение метрик
-    ax = axes[0, 0]
-    model_names = list(results.keys())
-    metrics_to_plot = ['accuracy', 'recall', 'precision', 'f1']
+# Масштабирование features (ТОЛЬКО на тренировочных данных)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)  # ТЕСТ трансформируем параметрами от ТРЕЙНА
 
-    x = np.arange(len(model_names))
-    width = 0.2
 
-    for i, metric in enumerate(metrics_to_plot):
-        values = [results[name][metric] for name in model_names]
-        ax.bar(x + i*width, values, width, label=metric)
+# param_grid = {
+#     "n_estimators":[100, 125, 150, 175, 250, 300],
+#      "max_depth":[3, 5, 7, 10],
+#     "min_samples_split":[2, 5, 7, 10],
+#     'learning_rate': [0.001, 0.01, 0.05, 0.1, 0.2, 0.3],
+#     "max_features": ['sqrt', 'log2', 0.5, 0.75,],
+#     "random_state": [42],
+#     "subsample": [1.0],
+# # 'alpha': [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 10.0]
+# # ,max_depth=5
+# # ,min_samples_split=2
+# }
 
-    ax.set_xlabel('Модели')
-    ax.set_ylabel('Значение метрики')
-    ax.set_title('Сравнение метрик моделей')
-    ax.set_xticks(x + width*1.5)
-    ax.set_xticklabels(model_names)
-    ax.legend()
-    ax.grid(True, alpha=0.3)
 
-    # График 2: ROC-AUC
-    ax = axes[0, 1]
-    roc_auc_scores = [results[name]['roc_auc'] for name in model_names]
 
-    bars = ax.bar(model_names, roc_auc_scores)
-    ax.axhline(y=0.5, color='red', linestyle='--', alpha=0.7, label='Случайное угадывание')
-    ax.set_title('ROC-AUC по моделям')
-    ax.set_ylabel('ROC-AUC')
-    ax.set_ylim(0, 1)
+# Обучение моделей
+rf_model = RandomForestRegressor(
+    n_estimators=200
+    # ,random_state=42
+    # ,max_depth=5
+    # ,min_samples_split=2
+)
 
-    for bar, auc in zip(bars, roc_auc_scores):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                f'{auc:.3f}', ha='center', va='bottom')
+rf_model.fit(X_train_scaled, y_train)
 
-    # График 3: Прибыльность
-    ax = axes[1, 0]
-    profit_scores = [results[name]['profit_potential'] for name in model_names]
+grid_search = GradientBoostingRegressor(
+    n_estimators=200
+    # ,max_depth=5
+    # ,random_state=42
+    # ,min_samples_split=2
+)
 
-    bars = ax.bar(model_names, profit_scores)
-    ax.axhline(y=0, color='red', linestyle='--', alpha=0.7)
-    ax.set_title('Потенциальная прибыльность')
-    ax.set_ylabel('Средняя прибыль на сделку')
+# grid_search = GridSearchCV(
+#     estimator=gb_model,
+#     param_grid=param_grid,
+#     cv=None,  # 5-fold кросс-валидация
+#     # scoring='neg_root_mean_squared_log_error',
+#     n_jobs=-1  # использование всех процессоров
+# )
 
-    for bar, profit in zip(bars, profit_scores):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.0001,
-                f'{profit:.6f}', ha='center', va='bottom')
+# Лучшие параметры: {'learning_rate': 0.3,
+#   'max_depth': 3
+#   , 'max_features': 0.75
+#   , 'min_samples_split': 5
+#   , 'n_estimators': 100
+#   , 'random_state': 42
+#   , 'subsample': 1.0}
+# Лучшая точность: 0.4759302555435191
+grid_search.fit(X_train, y_train)
 
-    # График 4: Кумулятивная доходность стратегии
-    ax = axes[1, 1]
-    for name in model_names:
-        if name in predictions_dict:
-            preds = predictions_dict[name]['predictions']
-            actuals = predictions_dict[name]['actuals']
-            price_changes = np.abs(np.random.randn(len(actuals))) * 0.01  # Замените на реальные изменения цены
+# lr_model = LinearRegression()
+# lr_model.fit(X_train_scaled, y_train)
 
-            # Симуляция торговой стратегии
-            returns = np.where(preds == actuals, price_changes, -price_changes)
-            cumulative_returns = np.cumsum(returns)
+def evaluate_model(model, X_test, y_test, model_name):
+    predictions = model.predict(X_test)
+    mse = mean_squared_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
 
-            ax.plot(cumulative_returns, label=name)
+    print(f"{model_name}:")
+    print(f"MSE: {mse:.4f}")
+    print(f"R²: {r2:.4f}")
+    print("-" * 30)
 
-    ax.set_title('Кумулятивная доходность торговой стратегии')
-    ax.set_xlabel('Время')
-    ax.set_ylabel('Кумулятивная доходность')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    return predictions
 
-    plt.tight_layout()
-    plt.show()
+# Оценка всех моделей
+print("РЕАЛЬНЫЕ результаты:")
+rf_pred = evaluate_model(rf_model, X_test_scaled, y_test, "Random Forest")
+gb_pred = evaluate_model(grid_search, X_test_scaled, y_test, "Gradient Boosting")
+# lr_pred = evaluate_model(lr_model, X_test_scaled, y_test, "Linear Regression")
 
-# Основной пайплайн
-def main_improved():
-    # Загрузка данных
-    df = pd.read_csv('main_data.csv')
+# Анализ важности признаков
+feature_importance = pd.DataFrame({
+    'feature': selected_features,
+    'importance': rf_model.feature_importances_
+}).sort_values('importance', ascending=False)
 
-    # Улучшенная подготовка данных
-    df = prepare_data_advanced_stationary(df)
+print("Важность признаков:")
+print(feature_importance)
 
-    # Выбор признаков для лагов
-    base_features = [
-        'log_return', 'volume_pct_change', 'hash-rate_pct_change',
-        'active-count_pct_change', 'total_fee_pct_change', 'transfer_count_pct_change',
-        'RSI_7', 'RSI_14', 'RSI_21', 'MACD_12_26', 'MACD_hist_12_26',
-        'volatility_7', 'volatility_14', 'volatility_21'
-    ]
+# Визуализация предсказаний
+plt.figure(figsize=(12, 6))
+plt.plot(y_test.values, label='Реальная цена', alpha=0.7)
+# plt.plot(rf_pred, label='Random Forest', alpha=0.7)
+plt.plot(gb_pred, label='Gradient Boosting', alpha=0.7)
+#plt.plot(lr_pred, label='Linear Regression', alpha=0.7)
+plt.legend()
+plt.title('Предсказания vs Реальная цена')
+plt.savefig('predictions_V2.png')
+plt.close()
 
-    # Создание лагов
-    df_lagged = create_selected_lags(df, base_features, n_lags=5)
-
-    # Целевая переменная и признаки
-    target = df_lagged['target']
-    features = df_lagged.drop(['target', 'future_log_return_3', 'log_close'], axis=1)
-
-    # Отбор наиболее важных признаков
-    selected_features = select_features(features, target, n_features=40)
-    X = features[selected_features]
-    y = target
-
-    print(f"Размер данных: {X.shape}")
-    print(f"Баланс классов: {y.mean():.3f} (доля растущих периодов)")
-    print(f"Отобрано признаков: {len(selected_features)}")
-
-    # Оценка моделей
-    results, all_predictions = evaluate_improved_models(X, y)
-
-    # Выбор лучшей модели
-    best_model_name = max(results, key=lambda x: results[x]['profit_potential'])
-    print(f"\nЛучшая модель: {best_model_name}")
-    for metric, value in results[best_model_name].items():
-        print(f"{metric}: {value:.4f}")
-
-    # Визуализация
-    plot_trading_strategy_results(results, all_predictions)
-
-    # Финальное обучение лучшей модели
-    scaler = RobustScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    models = build_improved_models()
-    best_model = models[best_model_name]
-    best_model.fit(X_scaled, y)
-
-    return best_model, scaler, selected_features, results, all_predictions
-
-if __name__ == "__main__":
-    model, scaler, feature_names, results, predictions = main_improved()
+# print("Лучшие параметры:", grid_search.best_params_)
+# print("Лучшая точность:", grid_search.best_score_)
