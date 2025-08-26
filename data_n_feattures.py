@@ -1,10 +1,10 @@
 # Загрузка данных
 import pandas as pd
 import matplotlib.pyplot as plt
+import cv
 
 df = pd.read_csv('main_data.csv')
 #df['active-count'] = df['active-count_smoo']
-df=df[df['date']>='2024-06-01']
 #df=df[df['date']<='2022-01-01']
 
 df['date'] = pd.to_datetime(df['date'])
