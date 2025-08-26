@@ -1,7 +1,7 @@
 #df=df[df['date']>='2023-01-01']
-from lib2to3.fixer_util import make_suite
+# from lib2to3.fixer_util import make_suite
 
-from sklearn.pipeline import Pipeline
+# from sklearn.pipeline import Pipeline
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import TimeSeriesSplit
@@ -60,7 +60,9 @@ selected_features = [
 
 good_features = [
     'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
-    'close_ma_7',
+    # 'close_ma_7',
+    'close_ma_3',
+    # 'close_lag_1',
     'hash-rate_lag_1', 'hash-rate_lag_2',
     # 'hash_active_count_dirived14',
     'hash_active_count_dirived14_lag_1', 'hash_active_count_dirived14_lag_2', 'hash_active_count_dirived14_lag_3',
@@ -111,6 +113,7 @@ param_grid = {
     "random_state": [42],
     "subsample": [1.0],
 }
+
 ridge_param_grid = {
     'alpha': [1, 0.1 , 0.01, 0.001, 0.0001, 0.00001, 0.000001, 0.0000001],
     'fit_intercept': [True],
@@ -139,7 +142,8 @@ def symmetric_mape(y_true, y_pred):
     return np.mean(2.0 * np.abs(y_pred - y_true) / (np.abs(y_pred) + np.abs(y_true))) * 100
 
 
-tscv = TimeSeriesSplit(n_splits=5, test_size=30, gap=30)
+tscv = TimeSeriesSplit(n_splits=5, test_size=30, gap=0)
+
 scoring = {
     'r2': 'r2',
     'mae': 'neg_mean_absolute_error',
@@ -183,6 +187,7 @@ def evaluate_model(model, X_test, y_test, model_name):
 # Оценка всех моделей
 print("РЕАЛЬНЫЕ результаты (без утечки данных):")
 print("-" * 30)
+
 gb_pred = evaluate_model(grid_search, X_test_scaled, y_test, "Gradient Boosting")
 ridge_pred = evaluate_model(ridge_grid_search, X_test_scaled, y_test, "Ridge")
 
@@ -220,8 +225,7 @@ plt.plot(range(window_size-1, len(y_test)), sma_baseline.values,
 plt.plot(test_dates, gb_pred, label='Gradient Boosting', alpha=0.7)
 plt.plot(test_dates, ridge_pred, label='Ridge', alpha=0.7)
 
-# Настройка отображения дат на оси X
-plt.xticks(rotation=90)  # <--- ВАЖНО: поворот меток на 90°
+plt.xticks(rotation=90)
 
 # Дополнительные настройки
 plt.title("Сравнение прогноза и реальных данных")
@@ -231,7 +235,7 @@ plt.legend()
 plt.grid(True)
 
 # Сохранение и показ графика
-plt.tight_layout()  # Улучшает расположение элементов
+plt.tight_layout()
 plt.savefig('predictions.png')
 
 print(grid_search.best_params_)

@@ -24,6 +24,7 @@ def create_lag_features(df, columns, n_lags=3):
 
 # Целевая переменная - будущая цена (цена ЗАВТРА)
 df['target_close'] = df['close'].shift(-1)
+df['close_ma_3'] = df['close'].shift(1).rolling(3).mean()
 
 df['close_change'] = df['close'].pct_change(2)  # Изменение за 2 дня
 df['close_change'] = df['close'].pct_change(3)  # Изменение за 3 дня
