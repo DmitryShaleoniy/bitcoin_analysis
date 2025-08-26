@@ -1,7 +1,3 @@
-
-#df=df[df['date']>='2023-01-01']
-
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import TimeSeriesSplit
@@ -58,12 +54,15 @@ df['fee_to_volume_ratio'] = df['total_fee'] / df['volume']
 
 df['macd_signal_diff'] = df['MACD'] - df['Signal_Line']
 
+df['MACD_Cross_Above_Signal'] = ((df['MACD'] > df['Signal_Line']) & (df['MACD'].shift(1) <= df['Signal_Line'].shift(1))).astype(int)
+df['MACD_Cross_Below_Signal'] = ((df['MACD'] < df['Signal_Line']) & (df['MACD'].shift(1) >= df['Signal_Line'].shift(1))).astype(int)
+
 
 # Создание лаговых features (ТОЛЬКО на исторических данных)
 features_to_lag = ['close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate',
                    'active-count', 'total_fee', 'transfer_count', 'yuan', 'zew_state', 'zew_mood_index', 'rub_usd', 'gesi_value',
                    'price_momentum_7d', 'volume_ratio_7d', 'volatility_14d', 'rsi_divergence', 'fee_to_volume_ratio', 'macd_signal_diff'
-                   , 'hash_active_count_7dirived']
+                   , 'hash_active_count_7dirived', 'MACD_Cross_Above_Signal', 'MACD_Cross_Below_Signal']
 df = create_lag_features(df, features_to_lag, n_lags=7)
 
 # Добавление скользящих средних (на исторических данных)
@@ -126,7 +125,9 @@ selected_features = [
     'volatility_14d',
     'rsi_divergence',
     #'fee_to_volume_ratio',
-    'macd_signal_diff'
+    # 'macd_signal_diff',
+    # 'MACD_Cross_Above_Signal_lag_1', 'MACD_Cross_Above_Signal_lag_2',  'MACD_Cross_Above_Signal_lag_3',
+    # 'MACD_Cross_Below_Signal_lag_1', 'MACD_Cross_Below_Signal_lag_2', 'MACD_Cross_Below_Signal_lag_3',
 ]
 
 df = df.dropna()
@@ -150,10 +151,13 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)  # ТЕСТ трансформируем параметрами от ТРЕЙНА
 
 # Обучение моделей
-rf_model = RandomForestRegressor(n_estimators=500, random_state=42)
+rf_model = RandomForestRegressor(n_estimators=200, random_state=42, max_depth=5)
 rf_model.fit(X_train_scaled, y_train)
 
-gb_model = GradientBoostingRegressor(n_estimators=100, random_state=42)
+gb_model = GradientBoostingRegressor(n_estimators=200, random_state=42, max_depth=5)
+# здесь должен начаться фрагмент с кроссвалидацией
+
+
 gb_model.fit(X_train_scaled, y_train)
 
 lr_model = LinearRegression()
@@ -186,11 +190,17 @@ feature_importance = pd.DataFrame({
 print("Важность признаков:")
 print(feature_importance)
 
+# Добавьте это после создания baseline_pred
+window_size = 20  # Размер окна сглаживания
+sma_baseline = y_test.rolling(window=window_size).mean().dropna()
+
 # Визуализация предсказаний
 plt.figure(figsize=(12, 6))
 plt.plot(y_test.values, label='Реальная цена', alpha=0.7)
 plt.plot(rf_pred, label='Random Forest', alpha=0.7)
-#plt.plot(gb_pred, label='Gradient Boosting', alpha=0.7)
+plt.plot(range(window_size-1, len(y_test)), sma_baseline.values,
+         label=f'Baseline (SMA {window_size} дней)', alpha=0.7, linewidth=2, color='purple')
+plt.plot(gb_pred, label='Gradient Boosting', alpha=0.7)
 #plt.plot(lr_pred, label='Linear Regression', alpha=0.7)
 plt.legend()
 plt.title('Предсказания vs Реальная цена')
