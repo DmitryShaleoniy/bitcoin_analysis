@@ -25,6 +25,16 @@ df['date'] = pd.to_datetime(df['date'])
 df = df.sort_values('date').reset_index(drop=True)
 
 #тут мы генерируем признаки - много кода с пандасовскими функциями
+# Вычисляем индекс, разделяющий первые 80% от остальных
+cut_index = int(len(df) * 0.8)
+
+# Генерируем шум только для первых 80%
+std = df['close'].std()
+noise = np.random.normal(0, 0.25 * std, size=cut_index) #тут я размываю данные для риджа, чтобы он не сильно смотрел на просто цену сегодня - а искал другие зависимости
+
+# Добавляем шум только к первым 80% данных
+df.loc[:cut_index - 1, 'close'] += noise
+
 df['close_change'] = df['close'].pct_change(3)  # ПРОЦЕНТНОЕ Изменение за 3 дня
 
 # Создание новых признаков
@@ -42,7 +52,7 @@ df['hash_active_count_7dirived'] = df['hash-rate']/df['active_count_ma_7'] #ка
 df['returns'] = df['close'].pct_change() # ---||---
 df['volatility_14d'] = df['returns'].rolling(window=14).std() #скользящее стандартное отклонения
 
-df['rsi_divergence'] = (df['rsi'] - df['close']) #добавил
+df['rsi_divergence'] = df['rsi'] - df['close'] #добавил
 #не просто разность, а процентное изменение
 
 df['fee_to_volume_ratio'] = df['total_fee'] / df['volume'] #все понято
@@ -100,18 +110,21 @@ df = df.dropna()
 #клево, создали много интересных фичей, теперь для удобства их можно объединить в массив
 
 selected_features = [
-    'close_lag_4',
+    #'close_lag_4',
     #'zew_mood_index_lag_1', 'zew_mood_index_lag_2', 'zew_mood_index_lag_3',
-    'active-count_lag_1', 'active-count_lag_2',
+    #'active-count_lag_1', 'active-count_lag_2',
     #'active-count_lag_3', 'active-count_lag_4', 'active-count_lag_5',
     'hash_active_count_dirived14',
-    'total_fee_lag_1', 'total_fee_lag_2', 'total_fee_lag_3',
-    'transfer_count_lag_1', 'transfer_count_lag_3',
-    'close_change_lag_2', 'close_change_lag_3',
+    #'total_fee_lag_1', 'total_fee_lag_2', 'total_fee_lag_3',
+    #'transfer_count_lag_1', 'transfer_count_lag_3',
+    #'close_change_lag_2', 'close_change_lag_3',
     #'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
-    'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
-    'rsi_lag_1', 'rsi_lag_2',
-    'MACD_Cross_Power_Normalized_lag_1', 'MACD_Cross_Power_Normalized_lag_2',
+    #'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
+    'rsi',
+    #'MACD',
+    'MACD_Cross_Power_Normalized',
+    #'rsi_lag_1', 'rsi_lag_2',
+    #'MACD_Cross_Power_Normalized_lag_1', 'MACD_Cross_Power_Normalized_lag_2',
     #'rub_usd_lag_1', 'rub_usd_lag_2' , 'rub_usd_lag_3',
     #'gesi_value_lag_1', 'gesi_value_lag_2', 'gesi_value_lag_3',
     'close_ma_7',
@@ -124,8 +137,8 @@ selected_features = [
     'hash_active_count_7dirived',
     'price_momentum_7d',
     'volume_ratio_7d',
-    'volatility_14d',
-    'rsi_divergence',
+    #'volatility_14d',
+    #'rsi_divergence',
     'fee_to_volume_ratio',
     'macd_signal_diff'
 ]
@@ -178,6 +191,10 @@ X_test = X.iloc[train_size:]
 y_train = y.iloc[:train_size]
 y_test = y.iloc[train_size:]
 
+# std = y_train.std()
+# noise = np.random.normal(0, 1 * std, size=len(y_train))
+# y_train = y_train + noise
+
 test_dates = df.iloc[train_size:]['date']
 
 print("Тестовые данные ")
@@ -215,7 +232,7 @@ def symmetric_mape(y_true, y_pred):
 refit = 'r2'
 scoring = {
     'r2': 'r2',
-    #'mae': 'neg_mean_absolute_error',
+    'mae': 'neg_mean_absolute_error',
     'mape': make_scorer(NMAPE),
     'mse': 'neg_mean_squared_error',
     'directional_accuracy': make_scorer(directional_accuracy),
@@ -311,8 +328,13 @@ def evaluate_model(model, X_test, y_test, model_name):
     predictions = model.predict(X_test)
     mse = mean_squared_error(y_test, predictions)
     r2 = r2_score(y_test, predictions)
+    mape = NMAPE(y_test, predictions)
+    Symmetric_mape = symmetric_mape(y_test, predictions)
+
 
     print(f"{model_name}:")
+    print(f"symmetric_mape: {Symmetric_mape:.4f}")
+    print(f"mape: {mape:.4f}")
     print(f"MSE: {mse:.4f}")
     print(f"R²: {r2:.4f}")
     print("-" * 30)
@@ -371,10 +393,10 @@ aligned_test_dates = aligned_test_dates[len(sma_baseline) - len(sma_values):]
 
 plt.plot(test_dates,y_test.values, label='Реальная цена', alpha=0.7)
 # plt.plot(rf_pred, label='Random Forest', alpha=0.7)
-plt.plot(test_dates,gb_pred, label='Gradient Boosting', alpha=0.7)
-#plt.plot(test_dates,ridge_pred, label='Ridge', alpha=0.7)
+#plt.plot(test_dates,gb_pred, label='Gradient Boosting', alpha=0.7)
+plt.plot(test_dates,ridge_pred, label='Ridge', alpha=0.7)
 #plt.plot(test_dates[:len(sma_baseline)],sma_baseline.values, label='Baseline', alpha=0.7)
-plt.plot(aligned_test_dates, sma_values.values, label='Baseline', alpha=0.7, linestyle='--')
+plt.plot(aligned_test_dates, sma_values.values, label='Baseline (SMA)', alpha=0.7, linestyle='--')
 
 plt.xlabel('Дата')
 plt.ylabel('Цена')
@@ -391,3 +413,5 @@ print("Лучшая точность GB:", gb_grid_search.best_score_)
 
 print("Лучшие параметры для Ridge:", ridge_grid_search.best_params_)
 print("Лучшая точность Ridge:", ridge_grid_search.best_score_)
+
+#

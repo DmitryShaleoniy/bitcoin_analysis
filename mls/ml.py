@@ -196,6 +196,9 @@ sma_baseline = y_test.rolling(window=window_size).mean().dropna()
 
 # Визуализация предсказаний
 plt.figure(figsize=(12, 6))
+plt.figure(figsize=(12, 6))
+window_size = 15
+sma_baseline = y_test.rolling(window=window_size).mean().dropna()
 plt.plot(y_test.values, label='Реальная цена', alpha=0.7)
 plt.plot(rf_pred, label='Random Forest', alpha=0.7)
 plt.plot(range(window_size-1, len(y_test)), sma_baseline.values,

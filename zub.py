@@ -31,7 +31,7 @@ print(df.head())
 #ftx_collapse = ['2022-11-06', '2022-12-15'] #биржа ftx сломалась
 #china_ban = ['2021-05-18', '2021-06-30']  # Запрет майнинга в Китае
 
-df_to_merge = pd.read_csv('BTC_merged_2010_to_2025.csv')
+df_to_merge = pd.read_csv('./data/csv/BTC_merged_2010_to_2025.csv')
 
 
 
@@ -63,7 +63,7 @@ df_no_time['loss_avg_14'] = df_no_time['loss'].rolling(14).mean()
 df_no_time['rs'] = (df_no_time['gain_avg_14'] / df_no_time['loss_avg_14']).apply(lambda x: round(x, 2))
 df_no_time['rsi'] = (100 - (100 / (1 + df_no_time['rs']))).apply(lambda x: round(x, 2))
 
-#rsi - это своеобразный спижометр для цены - rs считаем как отношение суммы ПРИРОСТОВ за 14 дней к сумме ПАДЕНИЙ за 14 дней
+#rs - это своеобразный спижометр для цены - rs считаем как отношение суммы ПРИРОСТОВ за 14 дней к сумме ПАДЕНИЙ за 14 дней
 #--можно не за 14 дней--
 #rsi - это приведение rs к процентному виду
 #если rsi > 70 - актив перекуплен - это сигнал к падению
@@ -115,12 +115,12 @@ import json
 
 #подключаем юани
 
-china_df = pd.read_csv('china_apply.csv')
+china_df = pd.read_csv('./data/csv/china_apply.csv')
 china_df = china_df.rename(columns={'Date': 'date'})
 china_df['date'] = pd.to_datetime(china_df['date'])
 china_df = china_df.rename(columns={'Value': 'yuan'})
 
-with open('spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
+with open('./data/json/spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
     data = json.load(file)
     block_df_temp = pd.DataFrame(data)
 
@@ -133,7 +133,7 @@ block_df_temp['date'] = pd.to_datetime(block_df_temp['date'], unit='s')
 block_df_temp= block_df_temp.reset_index(drop=True)
 
 
-with open('hash-rate-spizhennoe-v2.json', 'r', encoding='utf-8') as file:
+with open('./data/json/hash-rate-spizhennoe-v2.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
     #hash_df_temp = pd.DataFrame(data['data'])
 
@@ -153,7 +153,7 @@ print(hash_df.head())
 
 #активные адреса
 #https://studio.glassnode.com/charts/addresses.ActiveCount?a=BTC&chartStyle=column&pScl=lin&zoom=all
-with open('active_count.json', 'r', encoding='utf-8') as file:
+with open('./data/json/active_count.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
     active_count_df = pd.DataFrame(data)
 
@@ -166,7 +166,7 @@ active_count_df= active_count_df.reset_index(drop=True)
 
 #датасет с суммой всех fees за день (крутой, мало коррелирует)
 #https://studio.glassnode.com/charts/fees.VolumeSum?a=BTC&chartStyle=column&pScl=lin&zoom=all
-with open('volume_sum.json', 'r', encoding='utf-8') as file:
+with open('./data/json/volume_sum.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
     total_fee_df = pd.DataFrame(data)
 
@@ -179,7 +179,7 @@ total_fee_df= total_fee_df.reset_index(drop=True)
 
 #монет через транзакции (мб иожно улучщить за счет сравнения с ценой монеты???)
 #https://api.glassnode.com/v1/metrics/transactions/transfers_volume_sum?a=BTC&i=24h
-with open('transfers_volume_sum.json', 'r', encoding='utf-8') as file:
+with open('./data/json/transfers_volume_sum.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
     transfer_count_df = pd.DataFrame(data)
 
@@ -193,30 +193,30 @@ transfer_count_df = transfer_count_df.rename(columns={'v': 'transfer_count'})
 transfer_count_df= transfer_count_df.reset_index(drop=True)
 
 #индекс экономического настроения в евросоюзе ZEW
-zew_df = pd.read_csv('zew.csv')
+zew_df = pd.read_csv('./data/csv/zew.csv')
 zew_df['date'] = pd.to_datetime(zew_df['date'])
 
-gesi_df = pd.read_csv('gesi.csv')
+gesi_df = pd.read_csv('./data/csv/gesi.csv')
 gesi_df['date'] = pd.to_datetime(gesi_df['date'])
 
-rub_df = pd.read_csv('rubbles_dollars.csv')
+rub_df = pd.read_csv('./data/csv/rubbles_dollars.csv')
 rub_df['date'] = pd.to_datetime(rub_df['date'])
 
 
 df_no_time['date'] = pd.to_datetime(df_no_time['date'])
 df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
 df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
+# df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(zew_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(gesi_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(rub_df, on='date', how='inner').sort_values(by='date')
-#НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
+# df = df.merge(rub_df, on='date', how='inner').sort_values(by='date')
+# #НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
 df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
 df = df.merge(transfer_count_df, on='date', how='inner').sort_values(by='date')
 
 
-#усреднение активных адресов за 14 дней
+# #усреднение активных адресов за 14 дней
 window_size = 14
 df = df.dropna()
 df['active-count_smoothed'] = df['active-count'].rolling(window=window_size).mean()
@@ -238,8 +238,6 @@ metrics = [
     'transfer_count'
 ]
 
-
-
 plt.figure(figsize=(18, 16))
 sns.heatmap( df[metrics].corr(),
              annot=True,
@@ -247,7 +245,10 @@ sns.heatmap( df[metrics].corr(),
 plt.savefig('correlation_heatmap_new.png')
 plt.close()
 
+df = df.drop_duplicates(subset=['date'], keep='first')
+df = df.reset_index(drop=True)
 
+df = df.sort_values(by='date').reset_index(drop=True)
 
 # print('adefe')
 pd.set_option('display.max_columns', None)
@@ -257,11 +258,13 @@ print(df.head())
 print(df.tail())
 
 
-data = df[['yuan','date','close', 'volume', 'rsi',
+data = df[['date','close', 'volume', 'rsi', #'yuan', 'rub_usd' !!!!!
            'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
            'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
-           'active-count_smoothed', 'gesi_value', 'rub_usd', 'MACD', 'Signal_Line']]
+           'active-count_smoothed', 'gesi_value', 'MACD', 'Signal_Line']]
 
+
+#data = df
 plt.figure(figsize=(18, 16))
 sns.heatmap( data.drop(columns=['date']).corr(),
              annot=True,
@@ -270,4 +273,4 @@ plt.savefig('no_corr_try.png')
 plt.close()
 
 
-data.to_csv('main_data.csv', index=False)
+data.to_csv('./data/csv/main_data.csv', index=False)

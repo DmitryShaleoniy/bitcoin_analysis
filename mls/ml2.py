@@ -57,7 +57,6 @@ df['fee_to_volume_ratio'] = df['total_fee'] / df['volume']
 
 df['macd_signal_diff'] = df['MACD'] - df['Signal_Line']
 
-
 # Создание лаговых features (ТОЛЬКО на исторических данных)
 features_to_lag = ['close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate',
                    'active-count', 'total_fee', 'transfer_count', 'yuan', 'zew_state', 'zew_mood_index', 'rub_usd', 'gesi_value',
@@ -73,13 +72,10 @@ df['volume_ma_7'] = df['volume'].rolling(window=7).mean()
 df['zew_mood_ma_3'] = df['zew_mood_index'].shift(1).rolling(3).mean()
 df['zew_mood_ma_7'] = df['zew_mood_index'].shift(1).rolling(7).mean()
 
-
 # Скользящие средние для total_fee с правильным shift
 df['total_fee_ma_3'] = df['total_fee'].shift(1).rolling(3).mean()
 df['total_fee_ma_7'] = df['total_fee'].shift(1).rolling(7).mean()
 df['total_fee_ma_14'] = df['total_fee'].shift(1).rolling(14).mean()
-
-
 
 # Удаляем строки с NaN (первые строки после создания лагов и скользящих средних)
 df = df.dropna()
@@ -88,28 +84,28 @@ print(f"Пример: date={df.iloc[0]['date']}, close={df.iloc[0]['close']}, ta
 
 selected_features = [
     # Только лаговые features и исторические данные!
-    'zew_mood_index_lag_1', 'zew_mood_index_lag_2', 'zew_mood_index_lag_3',
-    'active-count_lag_1', 'active-count_lag_2',
-    'active-count_lag_3', 'active-count_lag_4', 'active-count_lag_5',
-    'total_fee_lag_1', 'total_fee_lag_2', 'total_fee_lag_3',
-    'transfer_count_lag_1', 'transfer_count_lag_3',  'transfer_count_lag_5',
-    'close_change_lag_2', 'close_change_lag_3',
-    'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
-    'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
-    'rsi_lag_1', 'rsi_lag_2',
-    'MACD_Cross_Power_Normalized_lag_1', 'MACD_Cross_Power_Normalized_lag_2',
-    'rub_usd_lag_1', 'rub_usd_lag_2' , 'rub_usd_lag_3',
-    'gesi_value_lag_1', 'gesi_value_lag_2', 'gesi_value_lag_3',
+    #'zew_mood_index_lag_1', 'zew_mood_index_lag_2', 'zew_mood_index_lag_3',
+    #'active-count_lag_1', 'active-count_lag_2',
+    #'active-count_lag_3', 'active-count_lag_4', 'active-count_lag_5',
+    #'total_fee_lag_1', 'total_fee_lag_2', 'total_fee_lag_3',
+    #'transfer_count_lag_1', 'transfer_count_lag_3',  'transfer_count_lag_5',
+    #'close_change_lag_2', 'close_change_lag_3',
+    #'volume_lag_1', 'volume_lag_2', 'volume_lag_3',
+    #'hash-rate_lag_1', 'hash-rate_lag_2', 'hash-rate_lag_3',
+    #'rsi_lag_1', 'rsi_lag_2',
+    #'MACD_Cross_Power_Normalized_lag_1', 'MACD_Cross_Power_Normalized_lag_2',
+    #'rub_usd_lag_1', 'rub_usd_lag_2' , 'rub_usd_lag_3',
+    #'gesi_value_lag_1', 'gesi_value_lag_2', 'gesi_value_lag_3',
     'close_ma_7',
-    'volume_ma_7',
-    'yuan_lag_1', 'yuan_lag_2', 'yuan_lag_3',
-    'zew_state_lag_1',
-    'zew_mood_ma_3',
-    'zew_mood_ma_7',
-    'total_fee_ma_3', 'total_fee_ma_7', 'total_fee_ma_14',
+    #'volume_ma_7',
+    #'yuan_lag_1', 'yuan_lag_2', 'yuan_lag_3',
+    #'zew_state_lag_1',
+    #'zew_mood_ma_3',
+    #'zew_mood_ma_7',
+    #'total_fee_ma_3', 'total_fee_ma_7', 'total_fee_ma_14',
     'hash_active_count_7dirived',
     'price_momentum_7d',
-    'volume_ratio_7d',
+    #'volume_ratio_7d',
     'volatility_14d',
     'rsi_divergence',
     'fee_to_volume_ratio',
@@ -138,8 +134,8 @@ X_test_scaled = scaler.transform(X_test)  # ТЕСТ трансформируе�
 
 
 param_grid = {
-    "n_estimators":[10, 100, 125, 150, 175, 200, 250, 300],
-    "max_depth":[3, 5, 7, 9, 11, 13, 15],
+    "n_estimators":[100, 150, 200, 300],
+    "max_depth":[3, 5, 13, 15],
     "min_samples_split":[2, 5, 7, 10],
     'learning_rate': [0.001, 0.01, 0.05, 0.1, 0.2, 0.3],
     "max_features": ['sqrt', 'log2', 0.5, 0.75],
@@ -148,6 +144,14 @@ param_grid = {
     "min_samples_leaf": [1, 3, 10],
 }
 
+quick_param_grid = {
+    "n_estimators": [100, 200],
+    "max_depth": [3, 5],
+    "learning_rate": [0.05, 0.1],
+    "subsample": [0.8, 1.0],
+    "max_features": ['sqrt', 'log2', 0.5, 0.75],
+    "random_state": [42]
+}
 
 # тут я хочу добавить кросс-валидацию
 
@@ -179,8 +183,8 @@ gb_model = GradientBoostingRegressor(
 
 grid_search = GridSearchCV(
     estimator=gb_model,
-    param_grid=param_grid,
-    cv=tscv,  # 5-fold кросс-валидация
+    param_grid=quick_param_grid,
+    cv=tscv,  # кросс-валидация
     scoring='neg_root_mean_squared_log_error',
     n_jobs=-1  # использование всех процессоров
 )
@@ -201,11 +205,26 @@ def evaluate_model(model, X_test, y_test, model_name):
     print("-" * 30)
 
     return predictions
+def get_importance(model, features):
+    if hasattr(model, 'feature_importances_'):
+        importance = model.feature_importances_
+    elif hasattr(model, 'coef_'):
+        importance = np.abs(model.coef_[0])
+    else:
+        raise ValueError("Model does not have feature importances.")
+
+    feature_importance = pd.DataFrame({
+        'feature': features,
+        'importance': importance
+    }).sort_values(by='importance', ascending=False)
+
+    return feature_importance
 
 # Оценка всех моделей
 print("РЕАЛЬНЫЕ результаты:")
 rf_pred = evaluate_model(rf_model, X_test_scaled, y_test, "Random Forest")
 gb_pred = evaluate_model(grid_search, X_test_scaled, y_test, "Gradient Boosting")
+grid_pred = evaluate_model(grid_search, X_test_scaled, y_test, "Grid")
 # lr_pred = evaluate_model(lr_model, X_test_scaled, y_test, "Linear Regression")
 # Анализ важности признаков
 feature_importance = pd.DataFrame({
@@ -215,12 +234,15 @@ feature_importance = pd.DataFrame({
 
 print("Важность признаков:")
 print(feature_importance)
+print("для grid search:")
+print(get_importance(grid_search.best_estimator_, selected_features))
 
 # Визуализация предсказаний
 plt.figure(figsize=(12, 6))
 plt.plot(y_test.values, label='Реальная цена', alpha=0.7)
 # plt.plot(rf_pred, label='Random Forest', alpha=0.7)
 plt.plot(gb_pred, label='Gradient Boosting', alpha=0.7)
+plt.plot(grid_pred, label='Grid', alpha=0.7)
 #plt.plot(lr_pred, label='Linear Regression', alpha=0.7)
 plt.legend()
 plt.title('Предсказания vs Реальная цена')
