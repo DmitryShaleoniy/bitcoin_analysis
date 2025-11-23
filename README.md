@@ -8,7 +8,7 @@ mls - модели обучения - ml3 - для эксперементов, �
 
 ТЕСТЫ:
 
-!\[](screenshots/gb.jpg)
+!\[](screenshots/gb.png)
 
-!\[](screenshots/ridge.jpg)
+!\[](screenshots/ridge.png)
 
