@@ -33,9 +33,6 @@ print(df.head())
 
 df_to_merge = pd.read_csv('./data/csv/BTC_merged_2010_to_2025.csv')
 
-
-
-
 # print(df.info())
 # print(df.columns)
 # df_no_time = df.drop(columns=['timeOpen', 'timeClose', 'timeHigh', 'timeLow', 'name'])
