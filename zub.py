@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 # Загрузка данных
 #df = pd.read_csv('combined_data.csv')
 #df_corona = pd.read_csv('btc_corona.csv')
-df = pd.read_csv('btc_no_vibrosi.csv')
+df = pd.read_csv('./data/csv/btc_no_vibrosi.csv')
 # df = df.merge(df_corona, on='date',  how='outer').sort_values(by='date')
 # print(df.info())
 
