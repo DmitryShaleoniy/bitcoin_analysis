@@ -1,0 +1,12 @@
+нужно:
+btc_no_vibrosi.csv
+./data/csv/BTC_merged_2010_to_2025.csv
+./data/csv/china_apply.csv
+./data/json/spizhennoe_avg_size.json
+./data/json/hash-rate-spizhennoe-v2.json
+./data/json/active_count.json
+./data/json/volume_sum.json
+./data/json/transfers_volume_sum.json
+./data/csv/zew.csv
+./data/csv/gesi.csv
+./data/csv/rubbles_dollars.csv

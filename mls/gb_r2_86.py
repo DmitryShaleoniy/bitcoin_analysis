@@ -15,7 +15,8 @@ from sklearn.metrics import make_scorer
 from sklearn.model_selection import TimeSeriesSplit #здесь проучим метод для кросс-валидации временных рядов
 
 #щас загружу данные
-df = pd.read_csv('../data/csv/main_data.csv')
+#df = pd.read_csv('../data/csv/main_data.csv')
+df = pd.read_csv('./data/csv/main_data.csv')
 df = df.drop_duplicates(subset=['date'], keep='first')
 df = df.reset_index(drop=True)
 
@@ -49,8 +50,8 @@ df['fee_to_volume_ratio'] = df['total_fee'] / df['volume'] #все понято
 
 df['macd_signal_diff'] = df['MACD'] - df['Signal_Line'] #когда MACD пересекает сигнал - это мощный намек
 
-df['zew_mood_ma_3'] = df['zew_mood_index'].shift(1).rolling(3).mean() #по сути это тоже лаги, но со скользищим средним
-df['zew_mood_ma_7'] = df['zew_mood_index'].shift(1).rolling(7).mean() # ---||---
+#df['zew_mood_ma_3'] = df['zew_mood_index'].shift(1).rolling(3).mean() #по сути это тоже лаги, но со скользищим средним
+#df['zew_mood_ma_7'] = df['zew_mood_index'].shift(1).rolling(7).mean() # ---||---
 
 df['total_fee_ma_3'] = df['total_fee'].shift(1).rolling(3).mean() #и снова тут лаги со скользящими средними
 df['total_fee_ma_7'] = df['total_fee'].shift(1).rolling(7).mean() #---||---
@@ -76,7 +77,7 @@ df['hash_active_count_dirived14'] = df['hash_active_count_7dirived'].rolling(win
 
 #дальше здесь добавление лаговых features - это просто перекопирую
 features_to_lag = ['close', 'close_change', 'volume','rsi', 'MACD_Cross_Power_Normalized', 'hash-rate',
-                   'active-count', 'total_fee', 'transfer_count', 'zew_state', 'zew_mood_index', 'gesi_value'
+                   'active-count', 'total_fee', 'transfer_count', 'gesi_value'
                    ]
 #дальше тут функция, котороая будет добавльть в наш датасет лаговые фичи - СРАЗУ СО СМЕЩЕНИЕМ (будем использовать shift)
 def create_lag_features(df, columns, n_lags=4):
