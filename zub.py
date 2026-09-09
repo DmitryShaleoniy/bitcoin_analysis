@@ -1,273 +1,153 @@
-from datetime import date
-from threading import activeCount
-
+import os
 import pandas as pd
 import numpy as np
-
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-
-import seaborn as sns
+from datetime import datetime as dt, timedelta
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Загрузка данных
-#df = pd.read_csv('combined_data.csv')
-#df_corona = pd.read_csv('btc_corona.csv')
-df = pd.read_csv('./data/csv/btc_no_vibrosi.csv')
-# df = df.merge(df_corona, on='date',  how='outer').sort_values(by='date')
-# print(df.info())
+# ==========================================
+# 1. ПРОВЕРКА АКТУАЛЬНОСТИ ДАННЫХ И ПАРСИНГ
+# ==========================================
+
+main_data_path = './data/csv/main_data.csv'
+need_update = True
+
+if os.path.exists(main_data_path):
+    try:
+        df_main = pd.read_csv(main_data_path)
+        last_date = str(df_main['date'].max())
+        yesterday_str = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        # Если последняя дата >= вчерашней, парсер можно не запускать
+        if last_date >= yesterday_str:
+            need_update = False
+    except Exception as e:
+        print(f"Ошибка чтения main_data.csv: {e}. Требуется обновление.")
+
+if need_update:
+    print("Данные устарели или отсутствуют. Запускаем парсер...")
+    os.system("python ./parser/parser_test.py")
+else:
+    print("Данные актуальны. Переходим к агрегации.")
 
 
-#df = df.set_index('date').combine_first(df_corona.set_index('date')).reset_index()
+# ==========================================
+# 2. ЗАГРУЗКА И РАСЧЕТ ИНДИКАТОРОВ (BTC)
+# ==========================================
 
-# Сортируем по дате
+# Основной датафрейм (цены Биткоина)
+df = pd.read_csv('./data/csv/btc_no_vibrosi_copy.csv')
+df['date'] = pd.to_datetime(df['date'])
 df = df.sort_values(by='date').reset_index(drop=True)
 
-print(df.info())
-print(df.head())
+df['change'] = df['close'] - df['open']
+df['gain'] = df['change'].apply(lambda x: x if x > 0 else 0)
+df['loss'] = df['change'].apply(lambda x: -x if x < 0 else 0)
 
-#covid_period = ['2020-02-15', '2020-04-30']
-#ftx_collapse = ['2022-11-06', '2022-12-15'] #биржа ftx сломалась
-#china_ban = ['2021-05-18', '2021-06-30']  # Запрет майнинга в Китае
+df['gain_avg_14'] = df['gain'].rolling(14).mean()
+df['loss_avg_14'] = df['loss'].rolling(14).mean()
 
-df_to_merge = pd.read_csv('./data/csv/BTC_merged_2010_to_2025.csv')
+# Защита от деления на 0 при расчете RSI
+df['rs'] = (df['gain_avg_14'] / df['loss_avg_14']).replace([np.inf, -np.inf], np.nan).fillna(0)
+df['rsi'] = (100 - (100 / (1 + df['rs']))).round(2)
 
-# print(df.info())
-# print(df.columns)
-# df_no_time = df.drop(columns=['timeOpen', 'timeClose', 'timeHigh', 'timeLow', 'name'])
-# #преобразование даты
-# df_no_time['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-# df_no_time['date'] = pd.to_datetime(df['timestamp']).dt.date
-# df_no_time = df_no_time.drop(columns=['timestamp'])
-#
-# df_no_time = df_no_time[df_no_time['date'] >= date(2025, 1, 1)]
-# df_no_time = df_no_time.reset_index(drop=True)
+df['EMA_12'] = df['close'].ewm(span=12, adjust=False).mean()
+df['EMA_26'] = df['close'].ewm(span=26, adjust=False).mean()
 
-df_no_time = df
+df['MACD'] = df['EMA_12'] - df['EMA_26']
+df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+df['MACD_Histogram'] = df['MACD'] - df['Signal_Line']
 
-#рассчет среднего, прибыли и убытка
-df_no_time['change'] = df_no_time['close'] - df_no_time['open']
-df_no_time['gain']=df_no_time['change'].apply(lambda x: x  if x > 0 else 0)
-df_no_time['loss']=df_no_time['change'].apply(lambda x: -x if x < 0 else 0)
+df['MACD_Cross_Power_Normalized'] = df['MACD_Histogram'] / df['close']
 
 
-df_no_time['gain_avg_14'] = df_no_time['gain'].rolling(14).mean()
-df_no_time['loss_avg_14'] = df_no_time['loss'].rolling(14).mean()
+# ==========================================
+# 3. ПОДКЛЮЧЕНИЕ МЕТРИК ИЗ CSV
+# ==========================================
+
+# 1. Средний размер блока (bsize)
+block_df = pd.read_csv('./data/csv/avg_size.csv')
+block_df['date'] = pd.to_datetime(block_df['date'])
+block_df = block_df.rename(columns={'value': 'bsize'})
+
+# 2. Хешрейт
+hash_df = pd.read_csv('./data/csv/btc_hash_rate.csv')
+hash_df['date'] = pd.to_datetime(hash_df['date'])
+hash_df = hash_df.rename(columns={'value': 'hash-rate'})
+
+# 3. Активные адреса
+active_count_df = pd.read_csv('./data/csv/btc_active_addresses.csv')
+active_count_df['date'] = pd.to_datetime(active_count_df['date'])
+active_count_df = active_count_df.rename(columns={'value': 'active-count'})
+
+# 4. Суммарный объем комиссий/транзакций (total_fee)
+volume_sum_df = pd.read_csv('./data/csv/volume_sum.csv')
+volume_sum_df['date'] = pd.to_datetime(volume_sum_df['date'])
+volume_col = 'volume_sum' if 'volume_sum' in volume_sum_df.columns else 'value'
+volume_sum_df = volume_sum_df.rename(columns={volume_col: 'total_fee'})
+
+# 5. Суточный объем переводов
+transfers_df = pd.read_csv('./data/csv/transfers_volume_sum.csv')
+transfers_df['date'] = pd.to_datetime(transfers_df['date'])
+transfers_col = 'value_usd' if 'value_usd' in transfers_df.columns else 'value'
+transfers_df = transfers_df.rename(columns={transfers_col: 'transfer_count'})
+
+# 6. Макроэкономика (GESI)
+if os.path.exists('./data/csv/gesi.csv'):
+    gesi_df = pd.read_csv('./data/csv/gesi.csv')
+    gesi_df['date'] = pd.to_datetime(gesi_df['date'])
+else:
+    gesi_df = pd.DataFrame(columns=['date', 'gesi_value'])
 
 
-#вводим rsi
-df_no_time['rs'] = (df_no_time['gain_avg_14'] / df_no_time['loss_avg_14']).apply(lambda x: round(x, 2))
-df_no_time['rsi'] = (100 - (100 / (1 + df_no_time['rs']))).apply(lambda x: round(x, 2))
+# ==========================================
+# 4. ОБЪЕДИНЕНИЕ ТАБЛИЦ (LEFT JOIN + FFILL)
+# ==========================================
 
-#rs - это своеобразный спижометр для цены - rs считаем как отношение суммы ПРИРОСТОВ за 14 дней к сумме ПАДЕНИЙ за 14 дней
-#--можно не за 14 дней--
-#rsi - это приведение rs к процентному виду
-#если rsi > 70 - актив перекуплен - это сигнал к падению
-#если rsi < 30 - актив перепродан - это сигнал к росту
+df = df.merge(block_df[['date', 'bsize']], on='date', how='left')
+df = df.merge(hash_df[['date', 'hash-rate']], on='date', how='left')
+df = df.merge(active_count_df[['date', 'active-count']], on='date', how='left')
+df = df.merge(volume_sum_df[['date', 'total_fee']], on='date', how='left')
+df = df.merge(transfers_df[['date', 'transfer_count']], on='date', how='left')
 
-#метрики по rsi
-df_no_time['is_overbought'] = (df_no_time['rsi'] > 70) * 1
-df_no_time['is_oversold'] = (df_no_time['rsi'] < 30) * 1
-#distance_from_70 = df['rsi_14'] - 70
+if not gesi_df.empty:
+    df = df.merge(gesi_df[['date', 'gesi_value']], on='date', how='left')
+else:
+    df['gesi_value'] = np.nan
 
-df_no_time['EMA_12'] = df_no_time['close'].ewm(span=12, adjust=False).mean()
-df_no_time['EMA_26'] = df_no_time['close'].ewm(span=26, adjust=False).mean()
+# Заполняем пропуски значениями из предыдущих дней
+df = df.sort_values('date').ffill()
+df = df.bfill()
 
+# Сглаживание активных адресов за 14 дней
+df['active-count_smoothed'] = df['active-count'].rolling(window=14).mean()
 
-##про EMA - это средняя цена за промежуток, но с акцентом на последние данные -
-#последние данные влияют на результат больше, чем те, что в начале промежутка
-
-#про MACD - это метрика, которая показиывает разницу (буквально разность) между двумя трендами -
-#долгосрчный и короткосрочный - эти тренды представлеют собой EMA за 21 и 12 дней соответственно
-#также существует такое понятие, как сигрнальная линия - это среднее значение MACD за последнее время(в нашем случае - за 9 дней)
-
-#MACD исследуют на дистанции - смотрят на то, как он изменяется
-#если он растет - разность между кратком и долгосрочным трендом растет - это означает бычий рост
-#наоборот - это означает медвежий рост
-#далее - про взаимосвязь с сигнальной линией MACD пересекает сигнальную снизу вверх — сигнал к покупке - у Макара тут это
-# называется золотой крест (бычье пересечение)
-#MACD пересекает сигнальную сверху вниз — сигнал к продажеMACD пересекает сигнальную снизу вверх) — сигнал к покупке
-# - мертвый крест (медвежье пересечение).
-
-df_no_time['MACD'] = df_no_time['EMA_12'] - df_no_time['EMA_26']
-df_no_time['Signal_Line'] = df_no_time['MACD'].ewm(span=9, adjust=False).mean()
-df_no_time['MACD_Histogram'] = df_no_time['MACD'] - df_no_time['Signal_Line']
-
-# Бычье пересечение (золотой крест MACD) в момент i
-df_no_time['MACD_Bullish_Cross'] = ((df_no_time['MACD'] > df_no_time['Signal_Line']) &
-                                    (df_no_time['MACD'].shift(1) <= df_no_time['Signal_Line'].shift(1))).astype(int)
-
-# Медвежье пересечение (мертвый крест MACD) в момент i
-df_no_time['MACD_Bearish_Cross'] = ((df_no_time['MACD'] < df_no_time['Signal_Line']) &
-                                    (df_no_time['MACD'].shift(1) >= df_no_time['Signal_Line'].shift(1))).astype(int)
-
-df_no_time['MACD_Cross_Power'] = df_no_time['MACD_Histogram']
-#нормализовано относительно цены:
-df_no_time['MACD_Cross_Power_Normalized'] = df_no_time['MACD_Histogram'] / df_no_time['close']
+# Удаляем первые строки с NaN от скользящего среднего
+df = df.dropna(subset=['active-count_smoothed']).reset_index(drop=True)
 
 
+# ==========================================
+# 5. ФОРМИРОВАНИЕ ИТОГОВОГО ДАТАСЕТА
+# ==========================================
 
-import json
-
-#подключаем юани
-
-china_df = pd.read_csv('./data/csv/china_apply.csv')
-china_df = china_df.rename(columns={'Date': 'date'})
-china_df['date'] = pd.to_datetime(china_df['date'])
-china_df = china_df.rename(columns={'Value': 'yuan'})
-
-with open('./data/json/spizhennoe_avg_size.json', 'r', encoding='utf-8') as file: #здесь данные за последний год - каждый день
-    data = json.load(file)
-    block_df_temp = pd.DataFrame(data)
-
-block = block_df_temp['data']
-block_df_temp = pd.DataFrame()
-
-block_df_temp['date'] = [i[0] for i in block[0]]
-block_df_temp['bsize'] = [i[1] for i in block[0]]
-block_df_temp['date'] = pd.to_datetime(block_df_temp['date'], unit='s')
-block_df_temp= block_df_temp.reset_index(drop=True)
-
-
-with open('./data/json/hash-rate-spizhennoe-v2.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
-    #hash_df_temp = pd.DataFrame(data['data'])
-
-parsed_data = json.loads(data['data'])
-
-#print(parsed_data)
-hash_df_temp = pd.DataFrame(parsed_data['data'])
-
-hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x'], unit='ms')
-hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x']).dt.strftime('%Y-%m-%d')
-hash_df_temp['x'] = pd.to_datetime(hash_df_temp['x'])
-hash_df_temp['y'] = pd.to_numeric(hash_df_temp['y'])
-hash_df_temp = hash_df_temp.rename(columns={'x': 'date'})
-hash_df_temp = hash_df_temp.rename(columns={'y': 'hash-rate'})
-hash_df= hash_df_temp.reset_index(drop=True)
-print(hash_df.head())
-
-#активные адреса
-#https://studio.glassnode.com/charts/addresses.ActiveCount?a=BTC&chartStyle=column&pScl=lin&zoom=all
-with open('./data/json/active_count.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
-    active_count_df = pd.DataFrame(data)
-
-active_count_df['t'] = pd.to_datetime(active_count_df['t'], unit='s')
-active_count_df = active_count_df.rename(columns={'t': 'date'})
-active_count_df = active_count_df.rename(columns={'v': 'active-count'})
-active_count_df= active_count_df.reset_index(drop=True)
-
-
-
-#датасет с суммой всех fees за день (крутой, мало коррелирует)
-#https://studio.glassnode.com/charts/fees.VolumeSum?a=BTC&chartStyle=column&pScl=lin&zoom=all
-with open('./data/json/volume_sum.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
-    total_fee_df = pd.DataFrame(data)
-
-total_fee_df['t'] = pd.to_datetime(total_fee_df['t'], unit='s')
-
-total_fee_df = total_fee_df.rename(columns={'t': 'date'})
-total_fee_df = total_fee_df.rename(columns={'v': 'total_fee'})
-total_fee_df= total_fee_df.reset_index(drop=True)
-
-
-#монет через транзакции (мб иожно улучщить за счет сравнения с ценой монеты???)
-#https://api.glassnode.com/v1/metrics/transactions/transfers_volume_sum?a=BTC&i=24h
-with open('./data/json/transfers_volume_sum.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
-    transfer_count_df = pd.DataFrame(data)
-
-
-
-
-transfer_count_df['t'] = pd.to_datetime(transfer_count_df['t'], unit='s')
-
-transfer_count_df = transfer_count_df.rename(columns={'t': 'date'})
-transfer_count_df = transfer_count_df.rename(columns={'v': 'transfer_count'})
-transfer_count_df= transfer_count_df.reset_index(drop=True)
-
-#индекс экономического настроения в евросоюзе ZEW
-zew_df = pd.read_csv('./data/csv/zew.csv')
-zew_df['date'] = pd.to_datetime(zew_df['date'])
-
-gesi_df = pd.read_csv('./data/csv/gesi.csv')
-gesi_df['date'] = pd.to_datetime(gesi_df['date'])
-
-rub_df = pd.read_csv('./data/csv/rubbles_dollars.csv')
-rub_df['date'] = pd.to_datetime(rub_df['date'])
-
-
-df_no_time['date'] = pd.to_datetime(df_no_time['date'])
-df1 = df_no_time.merge(block_df_temp, on='date', how='inner').sort_values(by='date') #inner - оставляем только те, которые есть в обоих датафреймах
-df = df1.merge(hash_df, on='date', how='inner').sort_values(by='date')
-# df = df.merge(china_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(zew_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(gesi_df, on='date', how='inner').sort_values(by='date')
-# df = df.merge(rub_df, on='date', how='inner').sort_values(by='date')
-# #НУЖЕНО ОБНОВИТЬ ЭТИ ТРИ ДАТАФРЕЙМА КОТОРЫЕ НИЖЕ!!!!!
-df = df.merge(active_count_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(total_fee_df, on='date', how='inner').sort_values(by='date')
-df = df.merge(transfer_count_df, on='date', how='inner').sort_values(by='date')
-
-
-# #усреднение активных адресов за 14 дней
-window_size = 14
-df = df.dropna()
-df['active-count_smoothed'] = df['active-count'].rolling(window=window_size).mean()
-df = df.dropna()
-
-metrics = [
-    'close',
-    'volume',
-    'rsi',
-    'EMA_12',
-    'EMA_26',
-    'MACD',
-    'Signal_Line',
-    'MACD_Cross_Power_Normalized',
-    'hash-rate',
-    'bsize',
-    'active-count',
-    'total_fee',
-    'transfer_count'
+target_columns = [
+    'date', 'close', 'volume', 'rsi', 'MACD_Cross_Power_Normalized', 
+    'hash-rate', 'active-count', 'total_fee', 'transfer_count', 
+    'active-count_smoothed', 'gesi_value', 'MACD', 'Signal_Line'
 ]
 
+final_cols = [col for col in target_columns if col in df.columns]
+data = df[final_cols].copy()
+
+# Построение тепловой карты корреляции
 plt.figure(figsize=(18, 16))
-sns.heatmap( df[metrics].corr(),
-             annot=True,
-             cmap='coolwarm')
-plt.savefig('correlation_heatmap_new.png')
-plt.close()
-
-df = df.drop_duplicates(subset=['date'], keep='first')
-df = df.reset_index(drop=True)
-
-df = df.sort_values(by='date').reset_index(drop=True)
-
-# print('adefe')
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
-print(df.info())
-print(df.head())
-print(df.tail())
-
-
-data = df[['date','close', 'volume', 'rsi', #'yuan', 'rub_usd' !!!!!
-           'MACD_Cross_Power_Normalized', 'hash-rate', 'active-count',
-           'total_fee', 'transfer_count', 'zew_mood_index', 'zew_state',
-           'active-count_smoothed', 'gesi_value', 'MACD', 'Signal_Line']]
-
-
-#data = df
-plt.figure(figsize=(18, 16))
-sns.heatmap( data.drop(columns=['date']).corr(),
-             annot=True,
-             cmap='Greens')
+sns.heatmap(data.drop(columns=['date']).corr(), annot=True, cmap='Greens', fmt='.2f')
 plt.savefig('no_corr_try.png')
 plt.close()
 
-
-data.to_csv('./data/csv/main_data.csv', index=False)
+# Сохранение и вывод
+data.to_csv(main_data_path, index=False)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', 1000)
+print(data.info())
+print(f"\n агрегация завершена. Итоговый датасет обновлен и сохранен в {main_data_path}")
