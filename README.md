@@ -14,6 +14,8 @@ mls - модели обучения - ml3 - для эксперементов, �
 
 ![](screenshots/new_gb.png)
 
+![](screenshots/models_comparison.png)
+
 ![](screenshots/gb.png)
 
 ![](screenshots/ridge.png)
